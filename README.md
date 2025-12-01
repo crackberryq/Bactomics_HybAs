@@ -1,3 +1,8 @@
+> **⚠️ Technical Prerequisites: Intermediate Level**
+> This workflow runs in a Linux environment (Ubuntu or WSL). While the bioinformatic steps are automated, **working knowledge of the command line and Conda/Mamba package management is required.**
+>
+> *Note: Users may occasionally encounter system-specific Conda installation bugs (e.g., dependency conflicts, shell initialization) that are unrelated to the Bactomics code. Troubleshooting these environmental issues requires intermediate technical expertise.*
+
 # Bactomics: The Engineering Genomics Suite
 
 **Bactomics** is a modular bioinformatics platform purpose-built for **geotechnical engineers**, **construction biotechnologists**, and researchers working with **Microbially Induced Calcite Precipitation (MICP)**.
