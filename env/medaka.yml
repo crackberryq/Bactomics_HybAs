@@ -1,0 +1,9 @@
+name: medaka
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+channel_priority: strict
+dependencies:
+  - python=3.9           # medaka is most reliable on 3.9
+  - medaka

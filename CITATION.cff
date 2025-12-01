@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+type: software
+title: "Bactomics HybAs v8.4-lite"
+message: "If you use this workflow, please cite it."
+authors:
+  - family-names: Goldstein
+    given-names: Jimi
+    orcid: "https://orcid.org/0000-0002-7829-0090"
+version: "1.0"
+date-released: "2025-01-01"
+repository-code: "https://github.com/crackberryq/bactomics_hybas"
+license: "MIT"

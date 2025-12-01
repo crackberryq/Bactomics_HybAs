@@ -1,0 +1,16 @@
+name: assembly
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+channel_priority: strict
+dependencies:
+  - python=3.10
+  - fastp
+  - minimap2
+  - filtlong
+  - unicycler
+  - racon=1.4.13
+  - spades
+  - pigz
+  - fastp   

@@ -1,0 +1,13 @@
+{
+  "title": "Bactomics HybAs v8.4-lite",
+  "creators": [
+    {
+      "name": "Goldstein, Jimi",
+      "orcid": "0000-0002-7829-0090"
+    }
+  ],
+  "description": "A hybrid assembly workflow for engineering-grade genomic validation of MICP-related bacteria.",
+  "version": "1.0",
+  "upload_type": "software",
+  "license": "MIT"
+}

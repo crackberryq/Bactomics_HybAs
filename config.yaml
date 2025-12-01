@@ -1,0 +1,55 @@
+# -------------------------------------------------------------------
+#                 CONFIGURATION FOR BACTOMICS WORKFLOW
+# -------------------------------------------------------------------
+
+# --- REQUIRED PATHS ---
+# !! IMPORTANT !!
+# This path should point to your main project folder.
+# The workflow will look for your sample folder (e.g., 'isolate1') inside this directory.
+# Example: If your reads are in '/home/user/bactomics/isolate1/raw/',
+# then base_dir should be '/home/user/bactomics'.
+base_dir: /home/jimi/bactomics
+
+# REMOVED: The 'kraken2_db' path is now managed automatically by the Snakefile.
+# You no longer need to set it here.
+
+
+# --- SAMPLE & RUN PARAMETERS ---
+
+# isolate: The name of the sample sub-directory inside 'base_dir'.
+isolate: isolate3
+
+# target_taxid: The NCBI taxonomy ID for decontamination.
+# Reads not matching this ID (or its children) will be removed.
+# Example: 470 is for Acinetobacter baumannii
+target_taxid: 400634
+
+# threads: Number of CPU threads to use for multi-threaded tasks.
+threads: 12
+
+
+# --- ASSEMBLY & POLISHING PARAMETERS ---
+
+# keep_percent: The percentage of the best/longest reads to keep for assembly (used by Filtlong).
+keep_percent: 95
+
+# racon_rounds: Number of polishing rounds to perform with Racon.
+racon_rounds: 2
+
+# medaka_model: The Medaka model for Nanopore polishing.
+# Leave as '' (empty string) to let Medaka choose the default model.
+medaka_model: ''
+
+
+# --- QC & ANNOTATION PARAMETERS ---
+
+# busco_lineage: The BUSCO lineage dataset for completeness checks.
+busco_lineage: bacteria_odb10
+
+
+# Add this line at the end of the file
+run_kraken: true
+
+
+
+
