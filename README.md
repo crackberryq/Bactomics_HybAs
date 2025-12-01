@@ -1,21 +1,20 @@
+# Bactomics: The Engineering Genomics Suite
+
 > **⚠️ Technical Prerequisites: Intermediate Level**
 > This workflow runs in a Linux environment (Ubuntu or WSL). While the bioinformatic steps are automated, **working knowledge of the command line and Conda/Mamba package management is required.**
 >
 > *Note: Users may occasionally encounter system-specific Conda installation bugs (e.g., dependency conflicts, shell initialization) that are unrelated to the Bactomics code. Troubleshooting these environmental issues requires intermediate technical expertise.*
 
-# Bactomics: The Engineering Genomics Suite
-
 **Bactomics** is a modular bioinformatics platform purpose-built for **geotechnical engineers**, **construction biotechnologists**, and researchers working with **Microbially Induced Calcite Precipitation (MICP)**.
 
 Traditional bioinformatics tools focus on biological discovery.  
-**Bactomics focuses on engineering verification.**  
-It ensures that raw sequencing data produced by external providers meets the **quality, reproducibility, and traceability** required for infrastructure-related biotechnology.
+**Bactomics focuses on engineering verification.** It ensures that raw sequencing data produced by external providers meets the **quality, reproducibility, and traceability** required for infrastructure-related biotechnology.
 
 ---
 
 ## 🎯 Mission Statement
 
-To provide **standardized, engineering-grade pipelines** that allow non-specialists to:
+To provide **standardized pipelines** that allow non-specialists to:
 
 1. **Verify** bacterial isolate identity using genome-wide analysis.  
 2. **Confirm** critical metabolic pathways (e.g., urease operon).  
@@ -24,7 +23,7 @@ To provide **standardized, engineering-grade pipelines** that allow non-speciali
 
 ---
 
-# 📦 Bactomics HybAs (HybAs v8.4-lite)
+# 📦 Bactomics HybAs (v1.0 – HybAs v8.4-lite)
 
 ### Targeted Hybrid Assembly & Verification Workflow (Illumina + Nanopore)
 
@@ -63,7 +62,7 @@ This workflow was successfully validated on the following system:
 * **Manager:** Conda 25.9.1
 * **Workflow:** Snakemake v9.10.1
 * **Language:** Python v3.11.13
-  
+
 ---
 
 # 🛠️ Installation
@@ -74,40 +73,8 @@ Clone the repository into a folder named `bactomics` to match the default config
 ```bash
 git clone [https://github.com/crackberryq/bactomics_hybas.git](https://github.com/crackberryq/bactomics_hybas.git) bactomics
 cd bactomics
-
-## 2. Install Snakemake & Mamba
-
-```bash
-conda install -c conda-forge -c bioconda snakemake mamba
-```
-
----
-
-## 💻 System & Resource Requirements
-
-**1. Internet Access**
-* **Required.** The pipeline must be able to connect to:
-    * Anaconda Cloud (to install software environments).
-    * NCBI/BUSCO servers (to download reference datasets if not pre-cached).
-
-**2. Disk Space (Estimates)**
-* **Code & Environments:** ~3 GB
-* **Kraken2 Standard Database:** ~60 GB (Critical: Ensure you have space for this!)
-* **BUSCO Database:** ~50 MB (Negligible)
-* **Project Output:** ~500 MB per bacterial isolate (varies by sequencing depth).
-
-**3. Memory (RAM)**
-* **Minimum:** 16 GB (may fail on large genomes).
-* **Recommended:** 32 GB - 64 GB.
-    * *Note:* Hybrid assembly (Unicycler) and polishing (Medaka) are RAM-intensive.
- ---
- 
-# 📂 Input Folder Structure
-
----
-
-```
-base_dir/
+2. Install Snakemake & MambaBashconda install -c conda-forge -c bioconda snakemake mamba
+💻 System & Resource Requirements1. Internet AccessRequired. The pipeline must be able to connect to:Anaconda Cloud (to install software environments).NCBI/BUSCO servers (to download reference datasets if not pre-cached).2. Disk Space (Estimates)Code & Environments: ~3 GBKraken2 Standard Database: ~60 GB (Critical: Ensure you have space for this!)BUSCO Database: ~50 MB (Negligible)Project Output: ~500 MB per bacterial isolate (varies by sequencing depth).3. Memory (RAM)Minimum: 16 GB (may fail on large genomes).Recommended: 32 GB - 64 GB.Note: Hybrid assembly (Unicycler) and polishing (Medaka) are RAM-intensive.📂 Input Folder StructurePlaintextbase_dir/
 └── isolate_name/
     └── raw/
         ├── illumina/
@@ -116,22 +83,7 @@ base_dir/
         └── nanopore/
             ├── sample.fastq.gz
             └── ...
-```
-
-### Illumina Detection Rules
-- Filenames must contain `_R1` and `_R2`.
-
-### Nanopore Detection Rules
-- Any `.fastq` or `.fastq.gz` is accepted.
-
----
-
-# ⚙️ Configuration (`config.yaml`)
-
-Example:
-
-```yaml
-base_dir: /home/user/bactomics
+Illumina Detection RulesFilenames must contain _R1 and _R2.Nanopore Detection RulesAny .fastq or .fastq.gz is accepted.⚙️ Configuration (config.yaml)Example:YAMLbase_dir: /home/user/bactomics
 isolate: isolate3
 
 target_taxid: 400634
@@ -142,161 +94,17 @@ racon_rounds: 2
 medaka_model: ''
 
 busco_lineage: bacteria_odb10
-run_kraken: true
-```
-
----
-
-# 📦 BUSCO Lineage Database (Important)
-
-BUSCO requires lineage datasets such as `bacteria_odb10`, `bacillales_odb10`, etc.  
-Set `busco_lineage` according to your **16S identification**.
-
-### Option A — Auto-download (easy)
-BUSCO will automatically fetch lineages:
-```bash
-busco --list-datasets
-```
-
-### Option B — Manual Download
-```bash
-busco --download bacteria_odb10
-```
-
-### Option C — Store Lineages Inside Project
-```bash
-mkdir -p db/busco/
+📦 BUSCO Lineage Database (Important)BUSCO requires lineage datasets such as bacteria_odb10, bacillales_odb10, etc.Set busco_lineage according to your 16S identification.Option A — Auto-download (easy)BUSCO will automatically fetch lineages:Bashbusco --list-datasets
+Option B — Manual DownloadBashbusco --download bacteria_odb10
+Option C — Store Lineages Inside ProjectBashmkdir -p db/busco/
 cd db/busco/
-wget https://busco-data.ezlab.org/v5/data/lineages/bacteria_odb10.tar.gz
+wget [https://busco-data.ezlab.org/v5/data/lineages/bacteria_odb10.tar.gz](https://busco-data.ezlab.org/v5/data/lineages/bacteria_odb10.tar.gz)
 tar -xvf bacteria_odb10.tar.gz
-```
-
-Create:
-```
-db/busco/config.ini
-```
-
-Add:
-```
-[busco]
+Create:db/busco/config.ini
+Add:[busco]
 datasets_dir = /absolute/path/to/db/busco
-```
-
-Export:
-```bash
-export BUSCO_CONFIG_FILE=db/busco/config.ini
-```
-
----
-
-# 📝 Parameter Summary
-
-| Key | Description | Default |
-|------|------------|---------|
-| base_dir | Root project directory | /home/user/project |
-| isolate | Sample folder name | isolate3 |
-| target_taxid | Whitelist TaxID for KrakenTools | None |
-| threads | CPU threads | 12 |
-| keep_percent | % ONT reads retained (Filtlong) | 95 |
-| racon_rounds | Number of Racon polishing rounds | 2 |
-| medaka_model | Medaka model ('' = auto) | '' |
-| busco_lineage | BUSCO dataset | bacteria_odb10 |
-| run_kraken | Enable Kraken2 | true |
-
----
-
-# 🏃 Running the Pipeline
-
-### Full Pipeline
-
-```bash
-snakemake --use-conda --cores 12
-```
-
-### Build only final assembly
-
-```bash
-snakemake --use-conda --cores 12 isolate3/work/assembly.final.fasta
-```
-
-### Regenerate MultiQC report
-
-```bash
-snakemake --use-conda --cores 1 isolate3/reports/multiqc/multiqc_report.html
-```
-> **💡 Pro Tip: Seeing the Details**
-> * Use the **`-p`** flag (`--printshellcmds`) to see the exact shell commands being executed.
-> * The pipeline uses `tee` to print tool logs to the screen in real-time. If you want it to run silently in the background, remove `-p` and redirect stderr (e.g., `snakemake ... > run.log 2>&1`).
----
-
-# 📊 Workflow Summary
-
-1. **QC & Merging** (FastQC, SeqKit, NanoPlot)  
-2. **Kraken2 Contamination Profiling**  
-3. **Whitelisting via KrakenTools** (optional)  
-4. **fastp** trimming (Illumina)  
-5. **Filtlong** ONT filtering  
-6. **Hybrid Assembly** (Unicycler)  
-7. **Polishing:**  
-   - Racon (ONT)  
-   - Medaka  
-   - Polypolish (Illumina)  
-8. **Validation:**  
-   - BUSCO completeness  
-   - QUAST metrics  
-   - Coverage check  
-9. **Reporting:**  
-   - MultiQC  
-   - Prokka annotation  
-
----
-
-# 📄 Output Files
-
-| Path | Description |
-|------|-------------|
-| `work/assembly.final.fasta` | Final polished genome |
-| `reports/multiqc/multiqc_report.html` | Master QC report |
-| `annotation/<isolate>.gff` | Annotated genome |
-| `reports/busco/` | BUSCO completeness |
-| `logs/` | Execution logs |
-
----
-
-# ❓ Troubleshooting
-
-### BUSCO HTML missing
-**Cause:** incorrect lineage (e.g., using "auto").  
-**Fix:** match BUSCO dataset to 16S lineage.
-
-### KrakenTools errors
-Ensure:
-- `db/kraken2_std_db/` is present  
-- qc environment contains `extract_kraken_reads.py`
-
-### Polypolish failure
-Occurs if BAM is corrupted; delete and rerun mapping.
-
----
-
-# 📄 Academic Citations
-
-### Software:
-Goldstein et al.,  
-**Bactomics HybAs: A targeted hybrid assembly workflow enabling genomic verification of ureolytic bacteria in geotechnical engineering.**  
-*Submitted to MethodsX (2025).*
-
-### Application:
-Goldstein et al.,  
-**Valorizing Food Waste for Scalable, Low-Carbon Concrete Protection: A Genome-Resolved Study of Novel Indigenous Lysinibacillus Bioprotectants.**  
-*Under Review (2025).*
-
----
-
-# ⚖️ License
-
-Released under the **MIT License**.
-
----
-
-**Bactomics HybAs v8.4-lite** – Engineering-grade hybrid assembly for construction biotechnology.
+Export:Bashexport BUSCO_CONFIG_FILE=db/busco/config.ini
+📝 Parameter SummaryKeyDescriptionDefaultbase_dirRoot project directory/home/user/bactomicsisolateSample folder nameisolate3kraken_dbPath to Kraken2 databasedb/kraken2_std_dbtarget_taxidWhitelist TaxID for KrakenToolsNonethreadsCPU threads12keep_percent% ONT reads retained (Filtlong)95racon_roundsNumber of Racon polishing rounds2medaka_modelMedaka model ('' = auto)''busco_lineageBUSCO datasetbacteria_odb10🏃 Running the PipelineFull PipelineBashsnakemake --use-conda -p --cores 12
+Build only final assemblyBashsnakemake --use-conda -p --cores 12 isolate3/work/assembly.final.fasta
+Regenerate MultiQC reportBashsnakemake --use-conda -p --cores 1 isolate3/reports/multiqc/multiqc_report.html
+💡 Pro Tip: Seeing the DetailsUse the -p flag (--printshellcmds) to see the exact shell commands being executed.The pipeline uses tee to print tool logs to the screen in real-time. If you want it to run silently in the background, remove -p and redirect stderr (e.g., snakemake ... > run.log 2>&1).📊 Workflow SummaryQC & Merging (FastQC, SeqKit, NanoPlot)Kraken2 Contamination Profiling 3. Whitelisting via KrakenTools (optional)fastp trimming (Illumina)Filtlong ONT filteringHybrid Assembly (Unicycler)Polishing: - Racon (ONT)MedakaPolypolish (Illumina)Validation: - BUSCO completenessQUAST metricsCoverage checkReporting: - MultiQCProkka annotation📄 Output FilesPathDescriptionwork/assembly.final.fastaFinal polished genomereports/multiqc/multiqc_report.htmlMaster QC reportannotation/<isolate>.gffAnnotated genomereports/busco/BUSCO completenesslogs/Execution logs❓ TroubleshootingBUSCO HTML missingCause: incorrect lineage (e.g., using "auto").Fix: match BUSCO dataset to 16S lineage.KrakenTools errorsEnsure:db/kraken2_std_db/ is presentqc environment contains extract_kraken_reads.pyPolypolish failureOccurs if BAM is corrupted; delete and rerun mapping.📄 Academic CitationsSoftware:Goldstein et al.,Bactomics HybAs: A targeted hybrid assembly workflow enabling genomic verification of ureolytic bacteria in geotechnical engineering. Submitted to MethodsX (2025).Application:Goldstein et al.,Valorizing Food Waste for Scalable, Low-Carbon Concrete Protection: A Genome-Resolved Study of Novel Indigenous Lysinibacillus Bioprotectants. Under Review (2025).⚖️ LicenseReleased under the MIT License.Bactomics HybAs v8.4-lite – Hybrid assembly tailored for construction biotechnology workflows.
