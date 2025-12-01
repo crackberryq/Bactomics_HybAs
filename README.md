@@ -69,11 +69,11 @@ This workflow was successfully validated on the following system:
 # 🛠️ Installation
 
 ## 1. Clone Repository
+Clone the repository into a folder named `bactomics` to match the default configuration.
 
 ```bash
-git clone https://github.com/crackberryq/bactomics_hybas.git
-cd bactomics_hybas
-```
+git clone [https://github.com/crackberryq/bactomics_hybas.git](https://github.com/crackberryq/bactomics_hybas.git) bactomics
+cd bactomics
 
 ## 2. Install Snakemake & Mamba
 
@@ -224,11 +224,9 @@ snakemake --use-conda --cores 12 isolate3/work/assembly.final.fasta
 ```bash
 snakemake --use-conda --cores 1 isolate3/reports/multiqc/multiqc_report.html
 ```
-💡 Pro Tip: Seeing the Details
-
-Use the -p flag (--printshellcmds) to see the exact shell commands being executed.
-
-The pipeline uses tee to print tool logs to the screen in real-time. If you want it to run silently in the background, remove -p and redirect stderr (e.g., snakemake ... > run.log 2>&1).
+> **💡 Pro Tip: Seeing the Details**
+> * Use the **`-p`** flag (`--printshellcmds`) to see the exact shell commands being executed.
+> * The pipeline uses `tee` to print tool logs to the screen in real-time. If you want it to run silently in the background, remove `-p` and redirect stderr (e.g., `snakemake ... > run.log 2>&1`).
 ---
 
 # 📊 Workflow Summary
