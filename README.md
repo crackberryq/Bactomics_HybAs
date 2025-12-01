@@ -91,6 +91,8 @@ conda install -c conda-forge -c bioconda snakemake mamba
 * **Minimum:** 16 GB (may fail on large genomes).
 * **Recommended:** 32 GB - 64 GB.
     * *Note:* Hybrid assembly (Unicycler) and polishing (Medaka) are RAM-intensive.
+ ---
+ 
 # 📂 Input Folder Structure
 
 ---
@@ -213,7 +215,11 @@ snakemake --use-conda --cores 12 isolate3/work/assembly.final.fasta
 ```bash
 snakemake --use-conda --cores 1 isolate3/reports/multiqc/multiqc_report.html
 ```
+💡 Pro Tip: Seeing the Details
 
+Use the -p flag (--printshellcmds) to see the exact shell commands being executed.
+
+The pipeline uses tee to print tool logs to the screen in real-time. If you want it to run silently in the background, remove -p and redirect stderr (e.g., snakemake ... > run.log 2>&1).
 ---
 
 # 📊 Workflow Summary
