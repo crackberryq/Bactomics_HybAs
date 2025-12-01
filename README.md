@@ -57,6 +57,15 @@ Removes biomedical tools (AMR, plasmids) to focus on **industrial and engineerin
 
 ---
 
+### ✅ Tested Configuration
+This workflow was successfully validated on the following system:
+* **OS:** Ubuntu 22.04.5 LTS (via WSL2)
+* **Manager:** Conda 25.9.1
+* **Workflow:** Snakemake v9.10.1
+* **Language:** Python v3.11.13
+  
+---
+
 # 🛠️ Installation
 
 ## 1. Clone Repository
