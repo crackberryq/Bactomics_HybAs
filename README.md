@@ -92,7 +92,7 @@ conda install -c conda-forge -c bioconda snakemake mamba
 * **Recommended:** 32 GB - 64 GB.
     * *Note:* Hybrid assembly (Unicycler) and polishing (Medaka) are RAM-intensive.
 # 📂 Input Folder Structure
-
+---
 ```
 base_dir/
 └── isolate_name/
