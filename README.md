@@ -24,7 +24,7 @@ To provide **standardized, engineering-grade pipelines** that allow non-speciali
 
 ---
 
-# 📦 Bactomics HybAs (v1.0 – HybAs v8.4-lite)
+# 📦 Bactomics HybAs (HybAs v8.4-lite)
 
 ### Targeted Hybrid Assembly & Verification Workflow (Illumina + Nanopore)
 
