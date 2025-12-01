@@ -58,7 +58,7 @@ Removes biomedical tools (AMR, plasmids) to focus on **industrial and engineerin
 
 ```bash
 git clone https://github.com/crackberryq/bactomics_hybas.git
-cd bactomics
+cd bactomics_hybas
 ```
 
 ## 2. Install Snakemake & Mamba
