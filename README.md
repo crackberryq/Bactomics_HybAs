@@ -74,6 +74,23 @@ conda install -c conda-forge -c bioconda snakemake mamba
 
 ---
 
+## 💻 System & Resource Requirements
+
+**1. Internet Access**
+* **Required.** The pipeline must be able to connect to:
+    * Anaconda Cloud (to install software environments).
+    * NCBI/BUSCO servers (to download reference datasets if not pre-cached).
+
+**2. Disk Space (Estimates)**
+* **Code & Environments:** ~3 GB
+* **Kraken2 Standard Database:** ~60 GB (Critical: Ensure you have space for this!)
+* **BUSCO Database:** ~50 MB (Negligible)
+* **Project Output:** ~500 MB per bacterial isolate (varies by sequencing depth).
+
+**3. Memory (RAM)**
+* **Minimum:** 16 GB (may fail on large genomes).
+* **Recommended:** 32 GB - 64 GB.
+    * *Note:* Hybrid assembly (Unicycler) and polishing (Medaka) are RAM-intensive.
 # 📂 Input Folder Structure
 
 ```
