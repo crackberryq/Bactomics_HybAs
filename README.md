@@ -31,6 +31,77 @@ For an even smoother experience, you can use the dedicated Bactomics assistant a
 
 This ensures that even first-time users can run **HybAs v8.4-Lite** reliably and confidently.
 
+---
+
+⚡ Auto-Installer (Optional)
+
+Bactomics includes an automated installer for users who prefer a quick, guided setup.
+This script will:
+
+Install Miniconda (if missing)
+
+Configure Conda with strict channel priority
+
+Create the bactomics environment with the validated versions
+
+Install Snakemake, Python, and Mamba
+
+Clone or update the Bactomics repository
+
+Run a Snakemake dry-run to verify installation
+
+Run the installer with:
+
+curl -LO https://raw.githubusercontent.com/crackberryq/Bactomics_HybAs/main/autoinstall.sh
+bash autoinstall.sh
+
+⚠️ Important Warnings
+
+The script modifies your Conda configuration, including channel order.
+
+Only run it on a system you fully control (Linux, macOS, or WSL2).
+
+If you use complex Conda/HPC setups, prefer manual installation.
+
+The script does NOT download BUSCO or Kraken2 databases — you must configure or point to them manually.
+
+If config.yaml is incomplete, the dry-run will warn you, but this does not affect installation success.
+
+✔ Recommended When
+
+You want the fastest fully working installation
+
+You are new to Conda or Snakemake
+
+You are using a clean Ubuntu / WSL2 / macOS environment
+
+You want guaranteed reproducibility
+
+❌ Not Recommended When
+
+You maintain multiple or custom Conda environments
+
+You rely on HPC module systems
+
+You want to control every dependency manually
+
+📘 Full Installer Documentation
+
+The full installer documentation is here:
+
+➡️ autoinstall.md
+
+The exact installer script is here:
+
+➡️ autoinstall.sh
+
+If you need help installing or running Bactomics, you can:
+
+Copy/paste this README into ChatGPT for guided assistance
+
+Or use the dedicated Bactomics tutor:
+
+👉 https://chatgpt.com/g/g-692fd2ee755881919c653d1db9929f92-bactomics-hybas-v8-4-lite-bioinformatics-tutor
 
 ---
 
