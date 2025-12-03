@@ -13,6 +13,22 @@ Some Conda issues (solver conflicts, channel ordering, shell initialization) are
 
 ---
 
+### 💬 Need Help?
+
+If you are not fully comfortable with Linux, Conda, or Snakemake, you may **copy and paste this entire README into ChatGPT**.  
+The model can assist you throughout the process, including:
+
+- Step-by-step installation guidance  
+- Setting up WSL2 or macOS/Linux environments  
+- Verifying your folder structure  
+- Editing and validating `config.yaml`  
+- Troubleshooting errors or dependency conflicts  
+- Assisting with running the workflow and interpreting outputs  
+
+This ensures that even first-time users can run **HybAs v8.4-Lite** reliably and confidently.
+
+---
+
 ## 🧱 What is Bactomics?
 
 **Bactomics** is a modular genomic analysis suite purpose-built for:
