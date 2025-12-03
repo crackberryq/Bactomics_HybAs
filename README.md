@@ -95,67 +95,121 @@ For maximum reproducibility, match these versions closely.
 
 ---
 
-# 🛠️ Step 0 — Platform Setup (WSL2 / macOS / Linux)
+## ⚠️ STEP 0 — Install Conda + Create a Clean Bactomics Environment (Strongly Recommended)
 
-## 🪟 Windows — Install WSL2
+Bactomics should always be installed in a **clean, isolated Conda environment**.  
+This prevents dependency conflicts with any previously installed bioinformatics tools.
 
-Open **PowerShell (Admin)**:
+---
 
-```powershell
-wsl --install
-```
+### 0.1 Install Conda
 
-This installs:
+#### Windows 10/11
+Bactomics requires **WSL2 (Ubuntu 22.04)**.
 
-- WSL2  
-- Ubuntu  
-- Required kernels  
-
-Restart if prompted.
-
-Update Ubuntu:
+1. Install WSL2 from Microsoft Store:  
+   https://aka.ms/wslstore
+2. Inside WSL2, install Miniconda:
 
 ```bash
-sudo apt update && sudo apt upgrade -y
-```
-
----
-
-## 🍎 macOS  
-Open Terminal and proceed to Miniconda installation.
-
----
-
-## 🐧 Linux  
-Proceed to Miniconda installation.
-
----
-
-# 📦 Install Miniconda (Python 3.11)
-
-Download from:  
-https://docs.conda.io/en/latest/miniconda.html
-
-Example Linux install:
-
-```bash
+cd ~
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
-```
+source ~/.bashrc
+macOS (Intel or Apple Silicon)
+bash
+Copy code
+cd ~
+curl -LO https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
+bash Miniconda3-latest-MacOSX-arm64.sh
+source ~/.zshrc
+Linux (Ubuntu / Debian / CentOS / RHEL)
+bash
+Copy code
+cd ~
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+source ~/.bashrc
+0.2 Configure Conda strict channel priority
+This is required for reproducible and conflict-free installation.
 
-Reload environment:
+bash
+Copy code
+conda config --set channel_priority strict
+conda config --add channels conda-forge
+conda config --add channels bioconda
+Verify:
 
-```bash
-source ~/.bashrc   # Linux/WSL
-source ~/.zshrc    # macOS
-```
+bash
+Copy code
+conda config --show channel_priority
+conda config --show channels
+Expected output:
 
-(Optional) Pin Conda version:
+vbnet
+Copy code
+channel_priority: strict
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+0.3 Create the Bactomics execution environment
+Recommended environment (validated configuration):
 
-```bash
-conda install conda=25.9.1
-```
+bash
+Copy code
+conda create -n bactomics python=3.11 snakemake=9.10.1 mamba -y
+conda activate bactomics
+To replicate internal testing environment exactly:
 
----
+bash
+Copy code
+conda create -n test python=3.11 snakemake=9.10.1 mamba -y
+conda activate test
+Verify:
+
+bash
+Copy code
+python --version
+snakemake --version
+mamba --version
+Expected versions:
+
+nginx
+Copy code
+Python 3.11.x
+Snakemake 9.10.1
+Mamba 1.x.x
+0.4 Clone the repository
+bash
+Copy code
+cd ~
+git clone https://github.com/crackberryq/bactomics_hybas.git bactomics
+cd bactomics
+0.5 Verify installation (dry-run)
+This checks:
+
+correct folder structure
+
+required envs/*.yml files
+
+Snakefile syntax
+
+Conda env creation
+
+Run:
+
+bash
+Copy code
+snakemake --use-conda -n -p --cores 4
+Successful output looks like:
+
+arduino
+Copy code
+Building DAG of jobs...
+Job counts...
+This was a dry-run.
+If you see no FileNotFoundError messages, installation is correct.
 
 # 🐍 Step 1 — Create the HybAs Environment (Pinned)
 
