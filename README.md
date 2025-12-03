@@ -38,19 +38,19 @@ This ensures that even first-time users can run **HybAs v8.4-Lite** reliably and
 Bactomics includes an automated installer for users who prefer a quick, guided setup.
 This script will:
 
-Install Miniconda (if missing)
+- Install Miniconda (if missing)
 
-Configure Conda with strict channel priority
+- Configure Conda with strict channel priority
 
-Create the bactomics environment with the validated versions
+- Create the bactomics environment with the validated versions
 
-Install Snakemake, Python, and Mamba
+- Install Snakemake, Python, and Mamba
 
-Clone or update the Bactomics repository
+- Clone or update the Bactomics repository
 
-Run a Snakemake dry-run to verify installation
+- Run a Snakemake dry-run to verify installation
 
-Run the installer with:
+- Run the installer with:
 
 curl -LO https://raw.githubusercontent.com/crackberryq/Bactomics_HybAs/main/autoinstall.sh
 bash autoinstall.sh
@@ -59,31 +59,31 @@ bash autoinstall.sh
 
 The script modifies your Conda configuration, including channel order.
 
-Only run it on a system you fully control (Linux, macOS, or WSL2).
+- Only run it on a system you fully control (Linux, macOS, or WSL2).
 
-If you use complex Conda/HPC setups, prefer manual installation.
+- If you use complex Conda/HPC setups, prefer manual installation.
 
-The script does NOT download BUSCO or Kraken2 databases — you must configure or point to them manually.
+- The script does NOT download BUSCO or Kraken2 databases — you must configure or point to them manually.
 
-If config.yaml is incomplete, the dry-run will warn you, but this does not affect installation success.
+- If config.yaml is incomplete, the dry-run will warn you, but this does not affect installation success.
 
 ✔ Recommended When
 
-You want the fastest fully working installation
+- You want the fastest fully working installation
 
-You are new to Conda or Snakemake
+- You are new to Conda or Snakemake
 
-You are using a clean Ubuntu / WSL2 / macOS environment
+- You are using a clean Ubuntu / WSL2 / macOS environment
 
-You want guaranteed reproducibility
+- You want guaranteed reproducibility
 
 ❌ Not Recommended When
 
-You maintain multiple or custom Conda environments
+- You maintain multiple or custom Conda environments
 
-You rely on HPC module systems
+- You rely on HPC module systems
 
-You want to control every dependency manually
+- You want to control every dependency manually
 
 📘 Full Installer Documentation
 
