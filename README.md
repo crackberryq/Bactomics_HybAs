@@ -16,16 +16,21 @@ Some Conda issues (solver conflicts, channel ordering, shell initialization) are
 ### 💬 Need Help?
 
 If you are not fully comfortable with Linux, Conda, or Snakemake, you may **copy and paste this entire README into ChatGPT**.  
-The model can assist you throughout the process, including:
+The model can assist you with:
 
-- Step-by-step installation guidance  
-- Setting up WSL2 or macOS/Linux environments  
+- Step-by-step installation  
+- WSL2/macOS/Linux setup  
+- Configuring `config.yaml`  
 - Verifying your folder structure  
-- Editing and validating `config.yaml`  
 - Troubleshooting errors or dependency conflicts  
-- Assisting with running the workflow and interpreting outputs  
+- Running the workflow and interpreting results  
+
+For an even smoother experience, you can use the dedicated Bactomics assistant available on the GPT Store:
+
+👉 **https://chatgpt.com/g/g-692fd2ee755881919c653d1db9929f92-bactomics-hybas-v8-4-lite-bioinformatics-tutor**
 
 This ensures that even first-time users can run **HybAs v8.4-Lite** reliably and confidently.
+
 
 ---
 
