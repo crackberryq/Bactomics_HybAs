@@ -1,86 +1,105 @@
-# Bactomics HybAs v8.4-Lite  
-**Engineering-Grade Hybrid Genome Assembly for Construction Biotechnology**
+# Bactomics HybAs v8.4‑Lite  
+**Engineering‑Grade Hybrid Genome Assembly for Construction Biotechnology**
 
-⚠️ **Technical Prerequisites: Intermediate Level**
-
+⚠️ **Technical Prerequisites: Intermediate Level**  
 This workflow runs in a **Linux-based environment** (Linux, macOS, or Windows via WSL2).  
-While the workflow is fully automated, users should have a working understanding of:
+While fully automated, users should have working knowledge of:
 
 - Linux command-line navigation  
-- Conda environments  
-- Basic troubleshooting of environment/installation issues  
+- Conda environment management  
+- Interpreting installation or dependency errors  
 
-Some Conda installation issues (dependency conflicts, environment solver failures, shell initialization) may occur and are **unrelated to HybAs**. These require basic technical familiarity to resolve.
+Some Conda-related system issues (solver conflicts, shell initialization errors) may occur and are **unrelated to HybAs**.  
+These require intermediate technical troubleshooting.
 
 ---
 
-## 🧱 What is Bactomics?
+# 🧱 What is Bactomics?
 
-**Bactomics** is a bioinformatics platform designed specifically for:
+**Bactomics** is a modular bioinformatics suite purpose‑built for:
 
 - Geotechnical engineers  
 - Construction biotechnologists  
-- Researchers applying Microbially Induced Calcium Carbonate Precipitation (MICP)
+- Researchers working with **Microbially Induced Calcium Carbonate Precipitation (MICP)**  
 
-Where traditional pipelines focus on biological discovery, **Bactomics focuses on engineering verification**, ensuring:
+Where traditional pipelines focus on *biological discovery*,  
+**Bactomics focuses on engineering verification**—ensuring:
 
-- Reproducibility  
-- Standardization  
+- Identity verification  
+- Pathway confirmation  
 - Traceability  
-- Lineage-aware QC  
-- Engineering-ready outputs  
+- Reproducibility across labs  
+- Standardization for bio‑cementation workflows  
 
 ---
 
-## 🎯 Mission
+# 🎯 Mission
 
-Enable non-specialists to:
+To provide **standardized, engineering‑oriented pipelines** enabling non‑specialists to:
 
-- Validate isolate identity (genome-wide)  
-- Confirm urease/MICP-related pathways  
-- Apply standard QC regardless of sequencing provider  
-- Generate reproducible results across labs and industrial settings  
-
----
-
-## 📦 HybAs v8.4-Lite
-
-**Hybrid Assembly & Verification for Illumina + Nanopore reads**
-
-This workflow performs:
-
-- Contamination detection (Kraken2)  
-- Target-taxid whitelist filtering (optional)  
-- Hybrid assembly (Unicycler)  
-- Triple polishing (Racon → Medaka → Polypolish)  
-- Structural and functional annotation (Prokka)  
-- Full QC aggregation (MultiQC)
-
-Biomedical modules (AMR, plasmids) are **removed** to keep the workflow focused on *industrial + engineering relevance*.
+1. **Verify** bacterial isolate identity with genome-wide resolution  
+2. **Confirm** urease operon and other MICP-relevant pathways  
+3. **Standardize** QC across sequencing vendors  
+4. **Ensure reproducibility** across industrial and academic workflows  
 
 ---
 
-## ✅ Validated Configuration (Exact Versions)
+# 📦 Bactomics HybAs (v8.4‑Lite)
 
-HybAs v8.4-Lite was developed and tested under the following versions:
+A targeted **hybrid assembly + QC verification** pipeline for Illumina + Nanopore reads, controlled via Snakemake.
+
+Biomedical modules (AMR, plasmids) were intentionally removed for **industrial relevance**.
+
+---
+
+# 🚀 Key Features (Merged & Updated)
+
+### 🔧 Targeted Assembly & Lineage Validation
+- Kraken2 contamination detection  
+- Optional taxon‑whitelisting using target_taxid  
+- BUSCO lineage‑specific completeness validation  
+
+### 🧬 Hybrid Assembly Engine
+- **Unicycler** integrates ONT structure with Illumina accuracy  
+- Optimized for circular microbial genomes  
+
+### 🔄 Triple Polishing Chain
+- **Racon** (ONT polishing)  
+- **Medaka** (ONT consensus correction)  
+- **Polypolish** (Illumina final correction)  
+
+### 📊 Engineering‑Ready Outputs
+- MultiQC summary report  
+- Prokka annotation  
+- BUSCO, QUAST, coverage checks  
+- Comprehensive QC summaries  
+
+### ⚡ Lean Industrial Architecture
+- No AMR modules  
+- No plasmid reconstruction  
+- Lightweight & reproducible  
+
+---
+
+# ✅ Validated Configuration (Exact Versions)
 
 | Component | Version |
 |----------|---------|
-| **OS** | Ubuntu 22.04.5 LTS (on WSL2) |
-| **Snakemake** | **9.10.1** |
-| **Conda** | **25.9.1** |
-| **Python** | **3.11.13** |
-| **Conda channels (order)** | bioconda → conda-forge → defaults |
+| **OS** | Ubuntu 22.04.5 LTS (via WSL2) |
+| **Conda** | 25.9.1 |
+| **Snakemake** | 9.10.1 |
+| **Python** | 3.11.13 |
+| **Conda channels** | bioconda → conda-forge → defaults |
 
-For reproducibility, users should match these versions as closely as possible.
+For maximum reproducibility, match these versions closely.
 
 ---
 
-## 🛠️ Step 0 — Platform Setup (WSL2/macOS/Linux) + Conda
+# 🛠️ Step 0 — Platform Setup (WSL2 / macOS / Linux)
 
-### 🪟 Windows 10/11 — Install WSL2
+## 🪟 Windows — Install WSL2
 
-Open **PowerShell (Admin)** and run:
+Open **PowerShell (Admin)**:
 
 ```powershell
 wsl --install
@@ -89,47 +108,48 @@ wsl --install
 This installs:
 
 - WSL2  
-- Ubuntu (default)  
-- Required kernel components  
+- Ubuntu  
+- Required kernels  
 
-Reboot if prompted.
+Restart if prompted.
 
-Launch **Ubuntu** from the Start Menu and update packages:
+Update Ubuntu:
 
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
 
-### 🍎 macOS (Intel & Apple Silicon)
+---
 
-Open **Terminal** and continue to the Miniconda installation step below.
-
-### 🐧 Linux (native)
-
-Open a terminal and continue to the Miniconda installation step below.
+## 🍎 macOS  
+Open Terminal and proceed to Miniconda installation.
 
 ---
 
-## 📦 Install Miniconda (Python 3.11)
+## 🐧 Linux  
+Proceed to Miniconda installation.
 
-Download Miniconda from:  
+---
+
+# 📦 Install Miniconda (Python 3.11)
+
+Download from:  
 https://docs.conda.io/en/latest/miniconda.html
 
-Run the installer (example for Linux):
+Example Linux install:
 
 ```bash
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
 
-Reload your shell:
+Reload environment:
 
 ```bash
-source ~/.bashrc    # Linux/WSL
-# or
-source ~/.zshrc     # macOS
+source ~/.bashrc   # Linux/WSL
+source ~/.zshrc    # macOS
 ```
 
-(Optional) Pin Conda to the validated version:
+(Optional) Pin Conda version:
 
 ```bash
 conda install conda=25.9.1
@@ -137,9 +157,7 @@ conda install conda=25.9.1
 
 ---
 
-## 🐍 Step 1 — Create the HybAs Environment
-
-Create a dedicated environment for the workflow:
+# 🐍 Step 1 — Create the HybAs Environment (Pinned)
 
 ```bash
 conda create -n hybas \
@@ -150,11 +168,11 @@ conda activate hybas
 ```
 
 ❗ **Do NOT install additional tools into this environment.**  
-HybAs automatically creates separate per-rule environments for Unicycler, Medaka, Prokka, BUSCO, Racon, etc.
+HybAs automatically generates isolated tool environments (Unicycler, BUSCO, Medaka, Prokka, Racon, etc.)
 
 ---
 
-## 📥 Step 2 — Clone the Repository
+# 📥 Step 2 — Clone the Repository
 
 ```bash
 git clone https://github.com/crackberryq/Bactomics_HybAs.git bactomics
@@ -163,11 +181,9 @@ cd bactomics
 
 ---
 
-## 📂 Step 3 — Required Input Folder Structure
+# 📂 Step 3 — Required Input Folder Structure
 
-Your project should look like:
-
-```text
+```
 base_dir/
 └── isolate_name/
     └── raw/
@@ -179,14 +195,12 @@ base_dir/
             └── ...
 ```
 
-✔ Illumina: must contain `_R1` and `_R2`  
-✔ Nanopore: any `.fastq` or `.fq` accepted  
+✔ Illumina must include `_R1` + `_R2`  
+✔ Nanopore may be `.fastq` or `.fastq.gz`  
 
 ---
 
-## ⚙️ Step 4 — Configure `config.yaml`
-
-Example:
+# ⚙️ Step 4 — Configuration: `config.yaml`
 
 ```yaml
 base_dir: /home/user/bactomics
@@ -205,15 +219,15 @@ run_kraken: true
 
 ---
 
-## 🦠 BUSCO Lineage Setup
+# 📦 BUSCO Lineage Setup
 
-To list available datasets:
+List available datasets:
 
 ```bash
 busco --list-datasets
 ```
 
-Download a lineage manually:
+Download manually:
 
 ```bash
 mkdir -p db/busco
@@ -221,9 +235,9 @@ cd db/busco
 busco --download bacteria_odb10
 ```
 
-Create a BUSCO config file:
+BUSCO config file:
 
-```text
+```
 db/busco/config.ini
 ```
 
@@ -234,7 +248,7 @@ Contents:
 datasets_dir = /absolute/path/to/db/busco
 ```
 
-Export before running:
+Export:
 
 ```bash
 export BUSCO_CONFIG_FILE=db/busco/config.ini
@@ -242,23 +256,51 @@ export BUSCO_CONFIG_FILE=db/busco/config.ini
 
 ---
 
-## 🧪 Step 5 — Optional Dry Run (Highly Recommended)
+# 📝 Parameter Summary
+
+| Key | Description | Default |
+|-----|-------------|---------|
+| base_dir | Project directory | /home/user/bactomics |
+| isolate | Sample folder name | isolate3 |
+| target_taxid | Kraken whitelist taxon | None |
+| threads | CPU threads | 12 |
+| keep_percent | Read retention | 95 |
+| racon_rounds | Polishing iterations | 2 |
+| medaka_model | Medaka model | '' |
+| busco_lineage | BUSCO dataset | bacteria_odb10 |
+| run_kraken | Run Kraken2 filter | true |
+
+---
+
+# 💻 System & Resource Requirements
+
+### **Internet**
+Required for:
+- Conda environment creation  
+- BUSCO database download  
+- Kraken2 database download  
+
+### **Disk Space**
+- Workflow + Conda envs: **≈ 3 GB**  
+- Kraken2 Standard DB: **≈ 60 GB**  
+- BUSCO datasets: **≈ 50 MB**  
+- Output per isolate: **≈ 500 MB**  
+
+### **Memory**
+- Minimum: **16 GB**  
+- Recommended: **32–64 GB**  
+
+---
+
+# 🧪 Step 5 — Optional Dry Run
 
 ```bash
 snakemake -s Snakefile --use-conda --cores 4 -n
 ```
 
-This checks:
-
-- Folder structure  
-- Config correctness  
-- Tool environments  
-
-**Without** executing any jobs.
-
 ---
 
-## 🏃 Step 6 — Run the Workflow
+# 🏃 Step 6 — Run the Workflow
 
 ### Full Pipeline
 
@@ -266,13 +308,13 @@ This checks:
 snakemake -s Snakefile --use-conda -p --cores 12
 ```
 
-### Generate ONLY final assembly
+### Final Assembly Only
 
 ```bash
 snakemake --use-conda -p --cores 12 isolate3/work/assembly.final.fasta
 ```
 
-### MultiQC only
+### MultiQC Only
 
 ```bash
 snakemake --use-conda -p --cores 1 isolate3/reports/multiqc/multiqc_report.html
@@ -280,47 +322,49 @@ snakemake --use-conda -p --cores 1 isolate3/reports/multiqc/multiqc_report.html
 
 ---
 
-## 📊 Summary of Workflow Steps
+# 📊 Workflow Summary
 
-1. **Raw read QC & merging**  
-2. **Cleaning**  
-3. **Assembly**  
-4. **Polishing**  
-5. **Annotation & QC**
-
----
-
-## 📁 Output Overview
-
-| File / Folder | Description |
-|---------------|-------------|
-| `work/assembly.final.fasta` | Final polished genome |
-| `annotation/<isolate>.gff` | Prokka structural annotation |
-| `annotation/<isolate>.faa` | Predicted proteins |
-| `reports/multiqc/multiqc_report.html` | Interactive QC report |
-| `reports/busco/` | BUSCO completeness |
-| `reports/kraken2/` | Kraken2 reports |
-| `logs/` | Execution logs |
+1. QC & merging  
+2. Kraken2 contamination check  
+3. Optional taxon whitelisting  
+4. fastp trimming  
+5. Filtlong filtering  
+6. Unicycler hybrid assembly  
+7. Racon → Medaka → Polypolish  
+8. BUSCO, QUAST, coverage  
+9. MultiQC + Prokka annotation  
 
 ---
 
-## 🧾 Academic Citations
+# 📁 Output Overview
 
-If you use HybAs v8.4-Lite, please cite:
+| Path | Description |
+|------|-------------|
+| `work/assembly.final.fasta` | Final genome assembly |
+| `annotation/<isolate>.gff` | Gene annotation |
+| `annotation/<isolate>.faa` | Protein sequences |
+| `reports/multiqc/multiqc_report.html` | QC overview |
+| `reports/busco/` | BUSCO results |
+| `reports/kraken2/` | Kraken2 contamination reports |
+| `logs/` | Snakemake & tool logs |
+
+---
+
+# 🧾 Academic Citations
 
 **Software / Workflow**  
-Goldstein et al. *Bactomics HybAs: A modular workflow for hybrid genome assembly and taxon-aware quality control.* (Submitted, 2025)
+Goldstein et al. *Bactomics HybAs: A modular workflow for hybrid genome assembly and taxon‑aware quality control.* (Submitted, 2025)
 
 **Application**  
-Goldstein et al. *Genome-Resolved Study of Indigenous Lysinibacillus Bioprotectants.* (Under review, 2025)
+Goldstein et al. *Genome‑Resolved Study of Indigenous Lysinibacillus Bioprotectants.* (Under review, 2025)
 
 ---
 
-## ⚖️ License
-
-Released under the **MIT License**.  
-See `LICENSE` for full details.
+# ⚖️ License
+Released under the **MIT License**.
 
 ---
 
-## 🧬 Bactomics HybAs v8.4-Lite
+# 🧬 Bactomics HybAs v8.4‑Lite
+Hybrid assembly tailored for construction biotechnology and MICP engineering.
+
