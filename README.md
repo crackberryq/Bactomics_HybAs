@@ -51,9 +51,11 @@ This script will:
 - Run a Snakemake dry-run to verify installation
 
 - Run the installer with:
-
+  
+```bash
 curl -LO https://raw.githubusercontent.com/crackberryq/Bactomics_HybAs/main/autoinstall.sh
 bash autoinstall.sh
+```
 
 ⚠️ Important Warnings
 
@@ -89,11 +91,8 @@ The script modifies your Conda configuration, including channel order.
 
 The full installer documentation is here:
 
-➡️ autoinstall.md
+➡️ [autoinstall.md](https://github.com/crackberryq/Bactomics_HybAs/blob/main/autoinstall.md)
 
-The exact installer script is here:
-
-➡️ autoinstall.sh
 
 If you need help installing or running Bactomics, you can:
 
