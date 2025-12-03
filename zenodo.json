@@ -7,7 +7,7 @@
     }
   ],
   "description": "A hybrid assembly workflow for engineering-grade genomic validation of MICP-related bacteria.",
-  "version": "1.0",
+  "version": "8.4",
   "upload_type": "software",
   "license": "MIT"
 }
