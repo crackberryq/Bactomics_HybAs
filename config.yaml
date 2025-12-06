@@ -37,7 +37,8 @@ keep_percent: 95
 racon_rounds: 2
 
 # medaka_model: The Medaka model for Nanopore polishing.
-# Leave as '' (empty string) to let Medaka choose the default model.
+# - For older R9.4.1 flow cells (Flo-Min106): Leave as '' (default)
+# - For newer R10.4.1 flow cells (Flo-Min114): Set to 'r1041_e82_400bps_sup_g615'
 medaka_model: ''
 
 
