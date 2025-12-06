@@ -8,7 +8,7 @@
 # The workflow will look for your sample folder (e.g., 'isolate1') inside this directory.
 # Example: If your reads are in '/home/user/bactomics/isolate1/raw/',
 # then base_dir should be '/home/user/bactomics'.
-base_dir: /home/jimi/bactomics
+base_dir: /home/user/bactomics
 
 # REMOVED: The 'kraken2_db' path is now managed automatically by the Snakefile.
 # You no longer need to set it here.
@@ -16,40 +16,55 @@ base_dir: /home/jimi/bactomics
 
 # --- SAMPLE & RUN PARAMETERS ---
 
-# isolate: The name of the sample sub-directory inside 'base_dir'.
+# isolate: The name of the specific sample folder to process.
+# NOTE: If using the batch script (./run_batch.sh), this value is 
+# automatically overridden for each sample. You can leave it as a placeholder.
 isolate: isolate3
 
-# target_taxid: The NCBI taxonomy ID for decontamination.
-# Reads not matching this ID (or its children) will be removed.
-# Example: 470 is for Acinetobacter baumannii
-target_taxid: 400634
 
-# threads: Number of CPU threads to use for multi-threaded tasks.
+# threads: Number of CPU threads to use for parallel tasks.
 threads: 12
 
+# --- DECONTAMINATION (KRAKEN2) ---
 
-# --- ASSEMBLY & POLISHING PARAMETERS ---
+# target_taxid: The NCBI Taxonomy ID for your specific organism.
+# - The workflow uses KrakenTools to KEEP reads matching this ID and its sub-species.
+# - All other reads (contamination) are discarded.
+# - Set to '' (blank) or 0 to disable filtering (keep all reads).
+#
+# Finding your ID: https://www.ncbi.nlm.nih.gov/taxonomy
+# Examples: 
+#   400634 (Lysinibacillus fusiformis)
+#   1402   (Bacillus genus - safer if you suspect plasmid HGT)
+target_taxid: 400634
 
-# keep_percent: The percentage of the best/longest reads to keep for assembly (used by Filtlong).
+# run_kraken: Set to true to generate contamination reports.
+run_kraken: true
+
+
+# --- ASSEMBLY & POLISHING ---
+
+# keep_percent: Filtlong quality filter (95 = keep top 95% best reads).
 keep_percent: 95
 
-# racon_rounds: Number of polishing rounds to perform with Racon.
+# racon_rounds: Number of Racon polishing iterations (2 is standard).
 racon_rounds: 2
 
-# medaka_model: The Medaka model for Nanopore polishing.
-# - For older R9.4.1 flow cells (Flo-Min106): Leave as '' (default)
-# - For newer R10.4.1 flow cells (Flo-Min114): Set to 'r1041_e82_400bps_sup_g615'
+# medaka_model: The neural network model for Nanopore polishing.
+# !! CRITICAL FOR ACCURACY !!
+# - For R9.4.1 Flow Cells (older): Leave as '' (empty). Default model will be used.
+# - For R10.4.1 Flow Cells (newer): You MUST specify the model used during basecalling.
+#   Example: 'r1041_e82_400bps_sup_g615'
 medaka_model: ''
 
 
-# --- QC & ANNOTATION PARAMETERS ---
+# --- QC & ANNOTATION ---
 
-# busco_lineage: The BUSCO lineage dataset for completeness checks.
+# busco_lineage: The specific dataset for genome completeness checking.
+# Options: bacteria_odb10 (broad), bacillales_odb10 (specific), etc.
 busco_lineage: bacteria_odb10
 
 
-# Add this line at the end of the file
-run_kraken: true
 
 
 
