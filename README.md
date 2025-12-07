@@ -328,17 +328,31 @@ Example configuration file:
 
 ```yaml
 base_dir: /home/user/bactomics
+# isolate: Placeholder name (overridden automatically if using run_batch.sh)
 isolate: isolate3
 
+# --- Decontamination ---
+# NCBI Taxonomy ID for your specific organism.
+# - Keeps reads matching this ID and its descendants.
+# - Removes biological contamination while preserving indigenous plasmids.
+# - Set to '' or 0 to disable filtering.
+# Example: 400634 (Lysinibacillus fusiformis) or 1402 (Bacillus genus)
 target_taxid: 400634
-threads: 12
+run_kraken: true
 
+# --- Assembly & Polishing ---
+threads: 12
 keep_percent: 95
 racon_rounds: 2
+
+# Medaka Model (CRITICAL for Accuracy)
+# - For R9.4.1 Flow Cells (older): Leave as '' (default).
+# - For R10.4.1 Flow Cells (newer): Set to your basecalling model.
+#   Example: 'r1041_e82_400bps_sup_g615'
 medaka_model: ''
 
+# --- QC ---
 busco_lineage: bacteria_odb10
-run_kraken: true
 ```
 
 Key fields:
