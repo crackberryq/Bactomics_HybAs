@@ -1,0 +1,30 @@
+# Ensure strict channel priority for reproducible bioinformatics stacks
+conda config --set channel_priority strict
+
+# (Optional) Use libmamba solver for robustness
+conda config --set solver libmamba
+
+# Remove any previous environment (if present)
+conda remove -n busco_qc_clean --all -y || true
+
+# Create a fresh QC environment
+conda create -n busco_qc_clean \
+  --override-channels \
+  -c conda-forge -c bioconda \
+  busco=5.5.0 \
+  quast=5.3.0 \
+  hmmer \
+  blast \
+  prodigal \
+  seqkit \
+  pandas \
+  matplotlib \
+  simplejson \
+  -y
+
+# Activate the environment
+conda activate busco_qc_clean
+
+# Verify tool availability
+busco --version
+quast --version || quast.py --version
