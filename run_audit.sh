@@ -1,4 +1,3 @@
-cat << 'EOF' > run_audit.sh
 #!/bin/bash
 
 # 1. READ ARGUMENT (Default to isolate2 if none provided)
@@ -81,4 +80,3 @@ calc_stats "ONT_Filtered" "$ISO/work/ont_filtered.fastq.gz"
 echo "========================================================"
 echo " AUDIT COMPLETE FOR $ISO."
 echo "========================================================"
-EOF

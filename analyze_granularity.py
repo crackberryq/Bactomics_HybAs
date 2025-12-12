@@ -1,4 +1,3 @@
-cat << 'EOF' > analyze_granularity.py
 import os
 import sys
 import glob
@@ -13,7 +12,6 @@ import seaborn as sns
 # --- 1. GET ARGUMENT ---
 if len(sys.argv) < 2:
     print("Usage: python analyze_granularity.py <isolate_name>")
-    print("Example: python analyze_granularity.py isolate2")
     sys.exit(1)
 
 ISO = sys.argv[1]
@@ -21,6 +19,7 @@ QC_DIR = f"{ISO}/reports/intermediate_qc_FULL"
 OUTPUT_DIR = f"{ISO}/reports"
 
 # Map step names to actual files for dnadiff
+# Adjust paths if your specific file naming differs
 FILE_MAP = {
     "01_Unicycler_Raw": f"{ISO}/asm/unicycler/assembly.fasta",
     "02_Racon_racon0":  f"{ISO}/work/assembly.racon0.fasta", 
@@ -73,7 +72,6 @@ for step in steps:
     indels = 0
     current_fasta = None
     
-    # Find matching file for this step
     for key in FILE_MAP:
         if key in step: 
             current_fasta = FILE_MAP[key]
@@ -98,38 +96,51 @@ for step in steps:
     data.append({'Step': label, 'N50': n50, 'Complete': comp, 'Fragmented': frag, 'SNPs': snps, 'Indels': indels})
 
 df = pd.DataFrame(data)
-print(df)
 df.to_csv(f"{OUTPUT_DIR}/{ISO}_granular_stats.csv", index=False)
 
-# PLOTTING
+# --- PLOTTING (THE 3-PANEL DASHBOARD) ---
 sns.set_theme(style="whitegrid")
-fig = plt.figure(figsize=(14, 8))
-gs = fig.add_gridspec(2, 1, height_ratios=[2, 1])
+fig = plt.figure(figsize=(14, 10))
+gs = fig.add_gridspec(2, 2)
 
-# Plot 1: BUSCO Recovery
-ax1 = fig.add_subplot(gs[0])
-ax1.plot(df['Step'], df['Complete'], marker='o', linewidth=3, color='#2ca02c', label='BUSCO Complete %')
-ax1.set_ylabel('Completeness (%)', fontweight='bold', color='#2ca02c')
-ax1.set_title(f'Pipeline Evolution: {ISO}', fontweight='bold', fontsize=14)
-ax1.legend(loc='lower right')
+# Panel 1: The "U-Shape" Recovery (BUSCO) - Top Row Full Width
+ax1 = fig.add_subplot(gs[0, :])
+color_busco = '#2ca02c'
+ax1.plot(df['Step'], df['Complete'], marker='o', linewidth=3, color=color_busco, label='BUSCO Complete %')
+ax1.set_ylabel('BUSCO Completeness (%)', color=color_busco, fontweight='bold', fontsize=12)
+ax1.tick_params(axis='y', labelcolor=color_busco)
+ax1.set_title(f'Biological Recovery Trajectory ({ISO})', fontweight='bold', fontsize=14)
 ax1.grid(True, alpha=0.3)
 
-# Annotate N50 on the same plot
-ax1b = ax1.twinx()
-ax1b.plot(df['Step'], df['N50'], marker='s', linestyle='--', color='#1f77b4', label='N50 (bp)', alpha=0.6)
-ax1b.set_ylabel('N50 (bp)', fontweight='bold', color='#1f77b4')
+# Add Narrative Annotation
+if not df.empty:
+    min_val = df['Complete'].min()
+    min_idx = df['Complete'].idxmin()
+    # Annotate the lowest point
+    ax1.annotate('Indel Damage\n(Long-read polishing)', 
+                 xy=(min_idx, min_val), xytext=(min_idx, min_val+3),
+                 arrowprops=dict(facecolor='black', shrink=0.05), ha='center', fontsize=11)
 
-# Plot 2: Corrections
-ax2 = fig.add_subplot(gs[1])
+# Panel 2: Structural Stability (N50) - Bottom Left
+ax2 = fig.add_subplot(gs[1, 0])
+color_n50 = '#1f77b4'
+ax2.plot(df['Step'], df['N50'], marker='s', linestyle='--', color=color_n50)
+ax2.set_ylabel('N50 (bp)', fontweight='bold')
+ax2.set_title('Structural Stability (N50)', fontweight='bold')
+ax2.tick_params(axis='x', rotation=45)
+
+# Panel 3: Granular Corrections - Bottom Right
+ax3 = fig.add_subplot(gs[1, 1])
 x = range(len(df))
-ax2.bar(x, df['Indels'], color='#e67e22', label='Indels Fixed')
-ax2.bar(x, df['SNPs'], bottom=df['Indels'], color='#e74c3c', label='SNPs Fixed')
-ax2.set_xticks(x)
-ax2.set_xticklabels(df['Step'], rotation=45, ha='right')
-ax2.set_ylabel('Modifications vs Prev', fontweight='bold')
-ax2.legend()
+ax3.bar(x, df['Indels'], color='#e67e22', alpha=0.8, label='Indels Modified')
+ax3.bar(x, df['SNPs'], bottom=df['Indels'], color='#e74c3c', alpha=0.8, label='SNPs Modified')
+ax3.set_xticks(x)
+ax3.set_xticklabels(df['Step'], rotation=45, ha='right')
+ax3.set_ylabel('Count (vs Previous Step)', fontweight='bold')
+ax3.set_title('Granular Corrections per Step', fontweight='bold')
+ax3.legend()
 
 plt.tight_layout()
-plt.savefig(f"{OUTPUT_DIR}/{ISO}_evolution.png", dpi=300)
-print(f"[+] Saved: {OUTPUT_DIR}/{ISO}_evolution.png")
-EOF
+final_plot = f"{OUTPUT_DIR}/{ISO}_granular_evolution.jpg" # Saving as JPG to match your preference
+plt.savefig(final_plot, dpi=300)
+print(f"\n[+] Visualization saved to: {final_plot}")
