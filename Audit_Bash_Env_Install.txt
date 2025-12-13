@@ -20,6 +20,7 @@ conda create -n busco_qc_clean \
   pandas \
   matplotlib \
   simplejson \
+  prokka \
   -y
 
 # Activate the environment
@@ -28,3 +29,4 @@ conda activate busco_qc_clean
 # Verify tool availability
 busco --version
 quast --version || quast.py --version
+
