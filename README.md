@@ -310,8 +310,8 @@ base_dir/
 └── isolate_name/
     └── raw/
         ├── illumina/
-        │   ├── sample_R1.fastq.gz
-        │   └── sample_R2.fastq.gz
+        │   ├── illumina_R1.fastq
+        │   └── illumina_R2.fastq
         └── nanopore/
             ├── sample.fastq.gz
             └── ...
