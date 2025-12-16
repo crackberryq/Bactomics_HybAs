@@ -1,82 +1,87 @@
 #!/bin/bash
+set -euo pipefail
+shopt -s nullglob
 
-# 1. READ ARGUMENT (Default to isolate2 if none provided)
 ISO=${1:-isolate2}
 LINEAGE="bacillales_odb10"
-BASE_DIR="$ISO/reports/intermediate_qc_FULL"
+THREADS=${2:-8}
+
+AUDIT_ROOT="$ISO/reports/full_audit"
+QC_DIR="$AUDIT_ROOT/qc_steps"
+LOG_DIR="$AUDIT_ROOT/logs"
+TAB_DIR="$AUDIT_ROOT/tables"
+FIG_DIR="$AUDIT_ROOT/figures"
+
+mkdir -p "$QC_DIR" "$LOG_DIR" "$TAB_DIR" "$FIG_DIR"
 
 echo "========================================================"
-echo " STARTING MASTER AUDIT FOR: $ISO"
-echo " Output: $BASE_DIR"
+echo " STARTING MASTER AUDIT (S1) FOR: $ISO"
+echo " Output root: $AUDIT_ROOT"
+echo " QC outputs:  $QC_DIR"
 echo "========================================================"
-
-mkdir -p "$BASE_DIR"
-
-# --- PART A: ASSEMBLY QC (QUAST + BUSCO) ---
 
 run_step() {
-    local name=$1
-    local file=$2
-    
-    if [ -f "$file" ]; then
-        echo ">>> Analyzing Assembly: $name..."
-        mkdir -p "$BASE_DIR/$name"
-        
-        # Run QUAST
-        quast.py -o "$BASE_DIR/$name" "$file" --silent
-        
-        # Run BUSCO
-        # Note: We check if BUSCO was already run to save time
-        if [ ! -f "$BASE_DIR/$name/short_summary.txt" ]; then
-             busco -i "$file" -o "busco_out" -m genome -l "$LINEAGE" \
-                  --out_path "$BASE_DIR/$name" -c 8 --force --quiet
-             # Move summary to main folder for easy parsing
-             cp "$BASE_DIR/$name"/busco_out/short_summary*.txt "$BASE_DIR/$name/short_summary.txt"
-        else
-             echo "    [v] BUSCO already exists."
-        fi
-        
-        echo "    [+] Stats generated."
+  local name="$1"
+  local file="$2"
+
+  if [[ -f "$file" ]]; then
+    echo ">>> Analyzing Assembly: $name..."
+    local step_dir="$QC_DIR/$name"
+    mkdir -p "$step_dir"
+
+    # QUAST
+    quast.py -o "$step_dir" "$file" --silent \
+      >"$LOG_DIR/quast_${name}.log" 2>&1 || true
+
+    # BUSCO (unique out name per step; always log)
+    if ! find "$step_dir" -type f -name "short_summary*.txt" | grep -q . ; then
+      local busco_run="busco_${name}"
+      echo "    -> BUSCO running: $busco_run"
+      busco -i "$file" -o "$busco_run" -m genome -l "$LINEAGE" \
+        --out_path "$step_dir" -c "$THREADS" --force \
+        >"$LOG_DIR/busco_${name}.log" 2>&1 || true
     else
-        echo "    [!] Skipped: $file not found."
+      echo "    [v] BUSCO summary already exists for $name."
     fi
+
+    echo "    [+] Done: $step_dir"
+  else
+    echo "    [!] Skipped: $file not found."
+  fi
 }
 
-# 1. Raw Unicycler
 run_step "01_Unicycler_Raw" "$ISO/asm/unicycler/assembly.fasta"
 
-# 2. Racon (All Rounds)
-for f in $ISO/work/assembly.racon*.fasta; do
-    fname=$(basename "$f")
-    round_num="${fname%.*}" 
-    run_step "02_Racon_${round_num##*.}" "$f"
+for f in "$ISO"/work/assembly.racon*.fasta; do
+  fname=$(basename "$f")
+  round_num="${fname%.*}"
+  run_step "02_Racon_${round_num##*.}" "$f"
 done
 
-# 3. Medaka
 run_step "03_Medaka" "$ISO/work/medaka/consensus.fasta"
-
-# 4. Polypolish (Final)
 run_step "04_Polypolish" "$ISO/work/assembly.polished.fasta"
 
-# --- PART B: READ STATISTICS ---
-
 echo ">>> Analyzing Read Statistics..."
-STATS_FILE="$ISO/reports/reads_stats.txt"
-echo "Stage,Format,NumReads,SumLen,AvgLen,Q20(%),Q30(%)" > "$STATS_FILE"
+STATS_FILE="$TAB_DIR/${ISO}_reads_stats.tsv"
+echo -e "Stage\tFile\tFormat\tNumSeq\tSumLen\tMinLen\tAvgLen\tMaxLen" > "$STATS_FILE"
 
 calc_stats() {
-    local tag=$1
-    local pattern=$2
-    if ls $pattern 1> /dev/null 2>&1; then
-        seqkit stats -a -T $pattern | sed '1d' | awk -v t="$tag" '{print t OFS $0}' >> "$STATS_FILE"
-    fi
+  local tag="$1"
+  local pattern="$2"
+  if ls $pattern >/dev/null 2>&1; then
+    seqkit stats -T $pattern | awk -v t="$tag" 'NR>1{print t "\t" $0}' >> "$STATS_FILE"
+  fi
 }
 
-calc_stats "Illumina_Raw" "$ISO/raw/illumina/*.fastq.gz"
+calc_stats "Illumina_Raw"      "$ISO/raw/illumina/*.fastq.gz"
 calc_stats "Illumina_Filtered" "$ISO/trimmed/*.trimmed.fq.gz"
-calc_stats "ONT_Raw" "$ISO/raw/nanopore/*.fastq.gz"
-calc_stats "ONT_Filtered" "$ISO/work/ont_filtered.fastq.gz"
+calc_stats "ONT_Raw"           "$ISO/raw/nanopore/*.fastq.gz"
+calc_stats "ONT_Filtered"      "$ISO/work/ont_filtered.fastq.gz"
 
 echo "========================================================"
-echo " AUDIT COMPLETE FOR $ISO."
+echo " AUDIT COMPLETE (S1) FOR $ISO."
+echo " Outputs:"
+echo "  - QC steps:   $QC_DIR/"
+echo "  - Logs:       $LOG_DIR/"
+echo "  - Read stats: $STATS_FILE"
 echo "========================================================"

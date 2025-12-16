@@ -1,0 +1,26 @@
+title: "HybAs Engineer Audit Report"
+subtitle: "Hybrid vs SPAdes: QC trajectory + annotation ghosting forensics"
+glossary:
+  N50: "A contiguity score: higher usually means fewer/larger contigs (structural stability)."
+  BUSCO: "Biological completeness check using conserved single-copy genes (biological integrity)."
+  ghost_gene: "A gene present in HybAs annotation but missing/fragmented in SPAdes annotation."
+
+verdict_explanations:
+  "FRAMESHIFT-LIKELY": "Strong evidence SPAdes locus is broken (non-triplet length change and excess stop codons)."
+  "ORF-LIKELY-INTACT": "Gene is likely intact; missing annotation is likely due to contig edges/start context/RBS effects."
+  "NO-HIT": "No confident match in SPAdes for this gene sequence (possible deletion/fragmentation)."
+  "INCONCLUSIVE": "Signal not strong enough to call; inspect Artemis context and BLAST hit distribution."
+
+sections:
+  - id: qc
+    title: "Step-by-step QC (Unicycler → Racon → Medaka → Polypolish)"
+    description: "Structural (QUAST) + biological (BUSCO) metrics per polishing step."
+  - id: plots
+    title: "Trajectory Plots"
+    description: "U-shape biological recovery and correction dashboards."
+  - id: ghosts
+    title: "Ghost Genes (HybAs present, SPAdes missing)"
+    description: "Genes that Prokka annotated on HybAs but did not recover on SPAdes (non-bioinformatician friendly list)."
+  - id: forensic
+    title: "Forensic Evidence per Gene"
+    description: "Per-gene evidence bundle: context FASTA, BLAST-to-SPAdes, and ORF integrity verdict."

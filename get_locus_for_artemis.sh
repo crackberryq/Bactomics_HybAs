@@ -1,98 +1,126 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
 
-# ==============================================================================
-# SCRIPT: Forensic Locus Fracture Extraction (With Quick Check)
-# PURPOSE: 1. Visuals: Saves files for Artemis/ACT to prove fragmentation.
-#          2. Text Report: Prints a text summary to screen for immediate verify.
-# ==============================================================================
+ISOLATE="${1:-}"
+TARGET="${2:-}"
+PAD="${3:-2000}"
 
-ISOLATE=$1
-GENE=$2
-PAD=2000  # Context window
-
-# Usage Check
-if [ -z "$ISOLATE" ] || [ -z "$GENE" ]; then
-    echo "❌ Error: Missing arguments."
-    echo "Usage: ./get_locus_for_artemis.sh [ISOLATE_FOLDER] [GENE_NAME]"
-    exit 1
+if [[ -z "$ISOLATE" || -z "$TARGET" ]]; then
+  echo "Usage: ./get_locus_for_artemis.sh <ISOLATE> <TARGET(gene|locus_tag|ID)> [PAD=2000]" >&2
+  exit 1
 fi
 
-# Create output folder
-OUT_DIR="${ISOLATE}/forensic_evidence"
+TARGET_CLEAN="$(printf "%s" "$TARGET" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+
+OUT_DIR="${ISOLATE}/forensic_evidence/${TARGET_CLEAN}"
 mkdir -p "$OUT_DIR"
 
-echo "----------------------------------------------------------------"
-echo "🔍 Starting Forensic Audit for '$GENE' in '$ISOLATE'"
-echo "----------------------------------------------------------------"
+HYBRID_GFF="$(find "${ISOLATE}/annotation" -maxdepth 1 -name "*.gff" | head -n 1)"
+HYBRID_FASTA="$(find "${ISOLATE}/annotation" -maxdepth 1 -name "*.fna" -o -name "*.fa" -o -name "*.fasta" | head -n 1)"
+SPADES_FASTA="${ISOLATE}/asm/spades/scaffolds.fasta"
 
-# --- STEP 1: AUTO-DETECT FILES ---
-HYBRID_GFF=$(find "$ISOLATE/annotation" -name "*.gff" | head -n 1)
-HYBRID_FASTA=$(find "$ISOLATE/annotation" -name "*.fna" | head -n 1)
-SPADES_FASTA=$(find "$ISOLATE/annotation_spades" -name "*_spades.fna" | head -n 1)
-
-if [[ -z "$HYBRID_GFF" || -z "$HYBRID_FASTA" || -z "$SPADES_FASTA" ]]; then
-    echo "❌ CRITICAL ERROR: Input files missing."
-    exit 1
+if [[ ! -s "$HYBRID_GFF" || ! -s "$HYBRID_FASTA" || ! -s "$SPADES_FASTA" ]]; then
+  echo "ERROR: missing inputs. Need:" >&2
+  echo "  - $HYBRID_GFF" >&2
+  echo "  - $HYBRID_FASTA" >&2
+  echo "  - $SPADES_FASTA" >&2
+  exit 1
 fi
 
-# --- STEP 2: LOCATE GENE ---
-grep -i "$GENE" "$HYBRID_GFF" | head -n 1 > "$OUT_DIR/temp_gene.gff"
+# --- Find the CDS feature line that matches TARGET_CLEAN ---
+TARGET_LINE="$(
+awk -F'\t' -v t="$TARGET_CLEAN" '
+BEGIN{IGNORECASE=1}
+$0 ~ /^#/ {next}
+$3!="CDS" {next}
+{
+  # parse attributes into a map
+  n=split($9, a, ";")
+  id=""; locus=""; gene=""; name=""; prod=""
+  for(i=1;i<=n;i++){
+    gsub(/^[ \t]+|[ \t]+$/, "", a[i])
+    split(a[i], kv, "=")
+    k=kv[1]; v=kv[2]
+    if(k=="ID") id=v
+    else if(k=="locus_tag") locus=v
+    else if(k=="gene") gene=v
+    else if(k=="Name") name=v
+    else if(k=="product") prod=v
+  }
 
-if [ ! -s "$OUT_DIR/temp_gene.gff" ]; then
-    echo "❌ Error: Gene '$GENE' not found."
-    rm "$OUT_DIR/temp_gene.gff"
-    exit 1
+  if(id==t || locus==t || gene==t || name==t){
+    print $0
+    exit
+  }
+
+  # Optional: allow product substring match (comment out if you want strict matching only)
+  if(prod ~ t){
+    print $0
+    exit
+  }
+}
+' "$HYBRID_GFF"
+)"
+
+if [[ -z "$TARGET_LINE" ]]; then
+  echo "ERROR: target '$TARGET_CLEAN' not found in $HYBRID_GFF" >&2
+  exit 1
 fi
 
-CONTIG=$(awk '{print $1}' "$OUT_DIR/temp_gene.gff")
-START=$(awk '{print $4}' "$OUT_DIR/temp_gene.gff")
-END=$(awk '{print $5}' "$OUT_DIR/temp_gene.gff")
-GENE_LEN=$((END - START + 1))
+CONTIG="$(printf "%s\n" "$TARGET_LINE" | awk -F'\t' '{print $1}')"
+START="$( printf "%s\n" "$TARGET_LINE" | awk -F'\t' '{print $4}')"
+END="$(   printf "%s\n" "$TARGET_LINE" | awk -F'\t' '{print $5}')"
+STRAND="$(printf "%s\n" "$TARGET_LINE" | awk -F'\t' '{print $7}')"
+LEN=$((END-START+1))
 
-echo "📍 Found $GENE on $CONTIG (Length: $GENE_LEN bp)"
+# Also extract the "Name" (gene symbol) if present, for nicer reporting
+FEATURE_NAME="$(
+printf "%s\n" "$TARGET_LINE" | awk -F'\t' '
+{
+  n=split($9,a,";"); name=""
+  for(i=1;i<=n;i++){
+    split(a[i],kv,"=")
+    if(kv[1]=="Name"){name=kv[2]}
+  }
+  print name
+}'
+)"
 
-# --- STEP 3: EXTRACT CONTEXT (For Artemis) ---
-NEW_START=$((START - PAD))
-if [ $NEW_START -lt 0 ]; then NEW_START=1; fi
-NEW_END=$((END + PAD))
+if [[ -n "$FEATURE_NAME" ]]; then
+  echo "Found $TARGET_CLEAN (Name=$FEATURE_NAME) on $CONTIG:${START}-${END} ($STRAND) len=${LEN} bp"
+else
+  echo "Found $TARGET_CLEAN on $CONTIG:${START}-${END} ($STRAND) len=${LEN} bp"
+fi
 
-echo -e "$CONTIG\t$NEW_START\t$NEW_END" > "$OUT_DIR/locus_window.bed"
+# --- Extract gene-only sequence from hybrid annotation FASTA ---
+echo -e "${CONTIG}\t$((START-1))\t${END}\t${TARGET_CLEAN}\t0\t${STRAND}" > "$OUT_DIR/hybrid_gene.bed"
+bedtools getfasta -fi "$HYBRID_FASTA" -bed "$OUT_DIR/hybrid_gene.bed" -s -fo "$OUT_DIR/${TARGET_CLEAN}_hybrid_gene.fna"
 
-bedtools getfasta -fi "$HYBRID_FASTA" -bed "$OUT_DIR/locus_window.bed" -fo "$OUT_DIR/${ISOLATE}_${GENE}_Hybrid_Context.fasta"
-grep "$CONTIG" "$HYBRID_GFF" | awk -v s=$NEW_START -v e=$NEW_END '$4 >= s && $5 <= e' > "$OUT_DIR/${ISOLATE}_${GENE}_Hybrid_Context.gff"
+# --- Extract context (PAD bp on both sides) from hybrid ---
+WSTART=$((START-PAD)); ((WSTART<1)) && WSTART=1
+WEND=$((END+PAD))
+echo -e "${CONTIG}\t$((WSTART-1))\t${WEND}\t${TARGET_CLEAN}_ctx\t0\t+" > "$OUT_DIR/hybrid_ctx.bed"
+bedtools getfasta -fi "$HYBRID_FASTA" -bed "$OUT_DIR/hybrid_ctx.bed" -fo "$OUT_DIR/${TARGET_CLEAN}_hybrid_context_${PAD}.fna"
 
-# --- STEP 4: BLAST (The Comparison) ---
-# We blast the Context sequence against SPAdes
-blastn \
-    -query "$OUT_DIR/${ISOLATE}_${GENE}_Hybrid_Context.fasta" \
-    -subject "$SPADES_FASTA" \
-    -outfmt "6 qseqid sseqid pident length qstart qend sstart send" \
-    > "$OUT_DIR/${ISOLATE}_${GENE}_vs_SPAdes.blast"
+# --- BLAST gene against SPAdes scaffolds to see fracture ---
+blastn -query "$OUT_DIR/${TARGET_CLEAN}_hybrid_gene.fna" -subject "$SPADES_FASTA" \
+  -outfmt "6 sseqid pident length qlen qstart qend sstart send bitscore" \
+  | sort -k9,9nr > "$OUT_DIR/${TARGET_CLEAN}_vs_SPAdes_gene.blast"
 
-# --- STEP 5: QUICK CHECK REPORT ---
-# Creates a simplified text file focusing strictly on the GENE breakage
-REPORT="$OUT_DIR/${ISOLATE}_${GENE}_QuickCheck.txt"
+# --- Summary report ---
+REPORT="$OUT_DIR/${TARGET_CLEAN}_fracture_summary.txt"
+{
+  echo "Target: $TARGET_CLEAN"
+  [[ -n "$FEATURE_NAME" ]] && echo "Name:   $FEATURE_NAME"
+  echo "Hybrid: $CONTIG:$START-$END ($STRAND) len=$LEN bp"
+  echo
+  echo "Top BLAST hits (hybrid gene vs SPAdes scaffolds):"
+  echo "sseqid  pident  aln_len  qlen  qstart-qend  sstart-send  bitscore"
+  head -n 20 "$OUT_DIR/${TARGET_CLEAN}_vs_SPAdes_gene.blast" | awk '{print $1,$2,$3,$4,$5"-"$6,$7"-"$8,$9}'
+  echo
+  echo "Contigs hit (unique):"
+  awk '{print $1}' "$OUT_DIR/${TARGET_CLEAN}_vs_SPAdes_gene.blast" | sort -u | nl -ba
+} > "$REPORT"
 
-echo "========================================================" > "$REPORT"
-echo " FORENSIC QUICK CHECK: $GENE in $ISOLATE" >> "$REPORT"
-echo "========================================================" >> "$REPORT"
-echo "Gene Length in Hybrid: $GENE_LEN bp" >> "$REPORT"
-echo "Status in Short-Read Assembly (SPAdes):" >> "$REPORT"
-echo "--------------------------------------------------------"
-echo "Col 1: Query (Hybrid) | Col 2: Subject (SPAdes Contig) | Col 4: Alignment Length" >> "$REPORT"
-echo "" >> "$REPORT"
-
-# Filter BLAST hits to show only those overlapping the gene itself (approx center of context)
-# The gene is roughly at position 2000-2000+LEN in the context file.
-cat "$OUT_DIR/${ISOLATE}_${GENE}_vs_SPAdes.blast" >> "$REPORT"
-
-# Cleanup
-rm "$OUT_DIR/temp_gene.gff" "$OUT_DIR/locus_window.bed"
-
-# --- PRINT TO SCREEN ---
-echo "✅ Audit Complete."
-echo ""
-echo "📄 CONTENTS OF QUICK REPORT:"
-cat "$REPORT"
-echo ""
-echo "📂 Full Evidence Saved to: $OUT_DIR"
+echo "Saved: $REPORT"
