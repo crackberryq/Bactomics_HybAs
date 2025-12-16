@@ -5,6 +5,7 @@
 This workflow runs in a **Linux-based environment** (Linux, macOS, or Windows via WSL2).  
 Although heavily automated, users should understand:
 
+- A working Ubuntu 22.04 installed
 - Linux command-line basics  
 - Conda environment management  
 - How to interpret and troubleshoot installation / dependency errors  
