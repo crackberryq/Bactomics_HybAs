@@ -2,8 +2,8 @@
 - [Installation](docs/INSTALL.md)
 - [Usage](docs/USAGE.md)
 - [Configuration](docs/CONFIGURATION.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Repo Structure](docs/TREPOSITORY_STRUCTURE.md)
+- [Troubleshooting](docs/TROUBLESHOOT.md)
+- [Repo Structure](docs/REPOSITORY_STRUCTURE.md)
 
 # Bactomics HybAs v9.0.0-Aware
 
