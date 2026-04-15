@@ -1,5 +1,3 @@
-# USAGE.md
-
 ## HybAs Aware usage guide
 
 This document explains how to **run HybAs Aware after installation**, how to choose the appropriate execution path, how to work with the sample sheet and isolate layout, and how to launch the downstream computational analysis workflow after main HybAs outputs are available.
