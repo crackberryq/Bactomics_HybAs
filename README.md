@@ -1,3 +1,6 @@
+## Quick links
+- [Installation](INSTALL.md)
+
 # Bactomics HybAs v9.0.0-Aware
 
 **Engineering-grade hybrid bacterial genome assembly, taxon-aware QC, provenance capture, and downstream genome analysis**
