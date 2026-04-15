@@ -1,5 +1,3 @@
-# REPOSITORY_STRUCTURE.md
-
 ## HybAs Aware repository structure guide
 
 This document explains the **intended public repository layout** for HybAs Aware and how that layout maps to workflow execution, isolate organization, generated outputs, configuration files, and runtime artifacts.
