@@ -28,7 +28,7 @@ The model can assist you with:
 
 For an even smoother experience, you can use the dedicated Bactomics assistant available on the GPT Store:
 
-👉 **https://chatgpt.com/g/g-692fd2ee755881919c653d1db9929f92-bactomics-hybas-v8-4-lite-bioinformatics-tutor**
+👉 **https://chatgpt.com/g/g-69dca93161d88191a8a3da8448fb2900-hybas-aware**
 
 This ensures that even first-time users can run **HybAs v8.4-Lite** reliably and confidently.
 
