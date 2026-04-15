@@ -1,33 +1,26 @@
 cff-version: 1.2.0
 message: >-
-If you use HybAs Aware, please cite the software repository using the
-metadata below. Update this file later to point to the associated paper
-once it is publicly available.
+  If you use HybAs Aware, please cite the software repository using the
+  metadata below. Update this file later to point to the associated paper
+  once it is publicly available.
 title: "HybAs Aware"
-abstract: >-
-Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
-provenance capture, and downstream genome analysis.
 type: software
-authors: Jimi Goldstein
-
-* family-names: Goldstein
-  given-names: Jimi
-  affiliation: "Human Link"
-  repository-code: "crackberryq/Bactomics_HybAs"
-  url: "https://github.com/crackberryq/Bactomics_HybAs/edit/HybAs_v9.0.0-AWARE"
-  license: "MIT"
-  keywords:
-* bacterial genome assembly
-* hybrid assembly
-* Snakemake
-* provenance
-* quality control
-* genome analysis
-* nanopore
-* Illumina
-  preferred-citation:
-  type: software
-  authors: Jimi Goldstein
-
-
-
+abstract: >-
+  Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
+  provenance capture, and downstream genome analysis.
+authors:
+  - family-names: "Goldstein"
+    given-names: "Jimi"
+    affiliation: "Human Link"
+repository-code: "https://github.com/crackberryq/Bactomics_HybAs"
+url: "https://github.com/crackberryq/Bactomics_HybAs"
+license: "MIT"
+keywords:
+  - "bacterial genome assembly"
+  - "hybrid assembly"
+  - "Snakemake"
+  - "provenance"
+  - "quality control"
+  - "genome analysis"
+  - "nanopore"
+  - "Illumina"
