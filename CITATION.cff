@@ -1,5 +1,3 @@
-# CITATION.cff
-
 cff-version: 1.2.0
 message: >-
 If you use HybAs Aware, please cite the software repository using the
@@ -10,13 +8,13 @@ abstract: >-
 Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
 provenance capture, and downstream genome analysis.
 type: software
-authors:
+authors: Jimi Goldstein
 
 * family-names: Goldstein
   given-names: Jimi
   affiliation: "Human Link"
-  repository-code: "TBA"
-  url: "TBA"
+  repository-code: "crackberryq/Bactomics_HybAs"
+  url: "https://github.com/crackberryq/Bactomics_HybAs/edit/HybAs_v9.0.0-AWARE"
   license: "MIT"
   keywords:
 * bacterial genome assembly
@@ -29,15 +27,7 @@ authors:
 * Illumina
   preferred-citation:
   type: software
-  authors:
+  authors: Jimi Goldstein
 
-  * family-names: Goldstein
-    given-names: Jimi
-    title: "HybAs Aware"
-    version: "TBA"
-    url: "https://github.com/crackberryq/Bactomics_HybAs/blob/HybAs_v9.0.0-AWARE"
-    notes: >-
-    Preferred citation currently points to the software repository.
-    Replace with the paper or preprint citation when it becomes public.
 
 
