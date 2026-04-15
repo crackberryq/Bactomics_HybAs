@@ -1,5 +1,3 @@
-# CONTRIBUTING.md
-
 ## Contributing to HybAs Aware
 
 Thank you for your interest in improving **HybAs Aware**.
