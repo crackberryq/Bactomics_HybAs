@@ -1,5 +1,3 @@
-# INSTALL.md
-
 ## HybAs Aware installation guide
 
 This document describes the **bootstrap installation path** for HybAs Aware.
