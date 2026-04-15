@@ -756,27 +756,3 @@ streamlit run app/hybas_streamlit_app.py
 
 ---
 
-## 🧾 Citation
-
-A `CITATION.cff` file should be included with this repository. Until an associated paper is publicly available, the citation target should be the software repository itself. Once the paper is public, the citation metadata should be updated accordingly.
-
----
-
-## ⚖️ License
-
-The recommended license for this repository is the **MIT License**.
-
----
-
-## 🤝 Contributions
-
-This repository is currently best documented as **controlled development with limited outside contributions**.
-
-Recommended contribution stance:
-
-* open an issue first
-* discuss major changes before opening a pull request
-* bug reports and reproducibility issues are welcome
-
----
-
