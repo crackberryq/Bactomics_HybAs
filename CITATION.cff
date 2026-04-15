@@ -1,0 +1,43 @@
+# CITATION.cff
+
+cff-version: 1.2.0
+message: >-
+If you use HybAs Aware, please cite the software repository using the
+metadata below. Update this file later to point to the associated paper
+once it is publicly available.
+title: "HybAs Aware"
+abstract: >-
+Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
+provenance capture, and downstream genome analysis.
+type: software
+authors:
+
+* family-names: Goldstein
+  given-names: Jimi
+  affiliation: "Human Link"
+  repository-code: "TBA"
+  url: "TBA"
+  license: "MIT"
+  keywords:
+* bacterial genome assembly
+* hybrid assembly
+* Snakemake
+* provenance
+* quality control
+* genome analysis
+* nanopore
+* Illumina
+  preferred-citation:
+  type: software
+  authors:
+
+  * family-names: Goldstein
+    given-names: Jimi
+    title: "HybAs Aware"
+    version: "TBA"
+    url: "TBA"
+    notes: >-
+    Preferred citation currently points to the software repository.
+    Replace with the paper or preprint citation when it becomes public.
+
+
