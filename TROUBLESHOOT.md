@@ -1,5 +1,3 @@
-# TROUBLESHOOTING.md
-
 ## HybAs Aware troubleshooting guide
 
 This document covers common failure modes and diagnostic patterns for **HybAs Aware** and its **Downstream Computational Genome Analysis Workflow**.
