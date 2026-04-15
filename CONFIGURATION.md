@@ -1,5 +1,3 @@
-# CONFIGURATION.md
-
 ## HybAs Aware configuration reference
 
 This document describes the configuration surfaces currently visible in the HybAs Aware repository.
