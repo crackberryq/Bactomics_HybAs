@@ -1,5 +1,8 @@
-## Quick links
-- [Installation](INSTALL.md)
+## Documentation
+- [Installation](docs/INSTALL.md)
+- [Usage](docs/USAGE.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
 
 # Bactomics HybAs v9.0.0-Aware
 
