@@ -1,0 +1,41 @@
+base_dir: /home/jimi/bactomics
+sample_sheet: /home/jimi/bactomics/Test/HybAs_Mega/samples.tsv
+
+threads: 8
+keep_percent: 95
+racon_rounds: 2
+
+busco_lineage: bacteria_odb10
+medaka_model: ""
+target_taxid: ""
+
+run_kraken: true
+run_busco: true
+run_prokka: true
+run_multiqc: true
+run_polypolish: true
+
+setup_only: false
+admin_mode: false
+ci_mode: false
+
+allow_ont_only: true
+allow_illumina_only: true
+require_target_taxid_for_kraken: false
+
+polish_mode: tripolish
+workflow_version: HybAs-8.8-ieee-batch
+
+db_root: /home/jimi/bactomics/db
+kraken_db_name: kraken2_std_db
+
+kraken_decision_mode: aware
+kraken_auto_passthrough_min_percent: 95.0
+kraken_auto_use_both_platforms: true
+kraken_include_children: true
+kraken_auto_prefer_species_min_percent: 90.0
+
+kraken_aware_delta_min_percent: 20.0
+kraken_aware_moderate_delta_min_percent: 10.0
+kraken_aware_high_target_min_percent: 95.0
+kraken_aware_moderate_target_min_percent: 80.0

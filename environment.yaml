@@ -1,0 +1,6 @@
+name: hybas_master_test
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+prefix: /home/jimi/miniconda3/envs/hybas_master_test

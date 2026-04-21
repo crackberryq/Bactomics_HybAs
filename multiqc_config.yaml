@@ -1,0 +1,58 @@
+title: "HybAs MultiQC Report"
+
+report_header_info:
+  - Workflow: "HybAs"
+  - Summary table: "metadata/multiqc_custom_content.tsv"
+
+custom_data:
+  hybas_summary:
+    file_format: "tsv"
+    section_name: "HybAs summary"
+    description: "Assembly, BUSCO, coverage, retention and tool-version summary exported by HybAs."
+    plot_type: "table"
+    pconfig:
+      namespace: "HybAs"
+
+sp:
+  hybas_summary:
+    fn: "multiqc_custom_content.tsv"
+
+table_columns_visible:
+  hybas_summary:
+    sample: true
+    run_mode: true
+    workflow_version: true
+    polish_mode: true
+    target_taxid: true
+    busco_lineage: true
+    assembly_bp: true
+    contig_count: true
+    quast_n50: true
+    quast_gc_percent: true
+    busco_summary: true
+    busco_complete_percent: true
+    busco_complete_count: true
+    busco_total_groups: true
+    ont_bp_raw: true
+    ont_bp_filtered: true
+    ont_retention_fraction: true
+    estimated_ont_coverage_x: true
+    qc_overall: true
+    qc_contiguity: true
+    qc_coverage: true
+    qc_ont_retention: true
+    tool_unicycler: true
+    tool_racon: true
+    tool_medaka: true
+    tool_polypolish: true
+    tool_kraken2: true
+    tool_busco: true
+    tool_quast: true
+    tool_prokka: true
+    tool_fastqc: true
+    tool_fastp: true
+    tool_nanoplot: true
+    tool_multiqc: true
+    tool_seqkit: true
+    tool_samtools: true
+    tool_bwa: true
