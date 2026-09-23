@@ -1,0 +1,13 @@
+name: hybas_polishing
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  - bwa=0.7.18
+  - samtools=1.20
+  - polypolish=0.6.0
+  - pigz=2.8
+
+

@@ -1,0 +1,8 @@
+name: hybas-medaka
+channels:
+  - conda-forge
+  - bioconda
+channel_priority: strict
+dependencies:
+  - python=3.12
+  - medaka=2.2.0
