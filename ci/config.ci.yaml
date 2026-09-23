@@ -1,0 +1,33 @@
+base_dir: ci
+sample_sheet: ci/samples.ci.tsv
+
+workflow_version: HybAs-8.7-ci
+threads: 4
+keep_percent: 95
+racon_rounds: 1
+
+busco_lineage: bacteria_odb10
+medaka_model: ""
+target_taxid: ""
+
+run_kraken: false
+run_busco: false
+run_prokka: false
+run_multiqc: false
+run_polypolish: true
+
+setup_only: false
+admin_mode: false
+ci_mode: true
+
+allow_ont_only: true
+allow_illumina_only: true
+require_target_taxid_for_kraken: false
+
+polish_mode: tripolish
+
+db_root: db
+kraken_db_name: standard
+
+busco_download_lineages:
+  - bacteria_odb10
