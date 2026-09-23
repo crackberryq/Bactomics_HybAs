@@ -5,7 +5,7 @@
 - [Troubleshooting](docs/TROUBLESHOOT.md)
 - [Repo Structure](docs/REPOSITORY_STRUCTURE.md)
 
-# Bactomics HybAs v9.0.0-Aware
+# Bactomics HybAs v8.8.0-Aware
 
 **Engineering-grade hybrid bacterial genome assembly, taxon-aware QC, provenance capture, and downstream genome analysis**
 
