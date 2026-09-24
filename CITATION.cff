@@ -3,7 +3,7 @@ message: >-
   If you use HybAs Aware, please cite the software repository using the
   metadata below. Update this file later to point to the associated paper
   once it is publicly available.
-title: "HybAs Aware"
+title: "HybAs Aware V8.8.o"
 type: software
 abstract: >-
   Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
