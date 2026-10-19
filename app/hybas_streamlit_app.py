@@ -158,8 +158,8 @@ DEFAULTS = {
     "main_snakefile": ROOT / "HybAs.smk" if (ROOT / "HybAs.smk").exists() else ROOT / "Hybas.smk",
     "main_config": ROOT / "config.yaml",
     "samples_tsv": ROOT / "samples.tsv",
-    "ci_config": ROOT / "ci" / "config.ci.yaml",
-    "ci_samples": ROOT / "ci" / "samples.ci.tsv",
+    "ci_config": ROOT / "examples" / "ci" / "config.ci.yaml",
+    "ci_samples": ROOT / "examples" / "ci" / "samples.ci.tsv",
 }
 
 # -----------------------------------------------------------------------------

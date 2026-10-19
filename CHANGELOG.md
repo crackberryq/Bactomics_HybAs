@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — package layout only
+
+- Group rule environments, report captions, helper code, scripts and MultiQC configuration under `workflow/`.
+- Group the sample template and CI example inputs under `examples/`.
+- Keep one canonical citation file and move the license and contribution/community files to standard repository locations.
+- Update file references, CI paths and documentation. The workflow version, analysis settings, stages, commands and isolate output layout are unchanged.
+
 ## 9.0.0-AWARE — 2026-10-19
 
 Engineering update from v8.8 commit `b14ff7688b72f1ae4a39bd99a4305d16a0e53ec1`.

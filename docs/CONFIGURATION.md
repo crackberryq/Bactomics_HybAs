@@ -35,4 +35,4 @@
 
 Default AWARE election, platform-specific actions and conservative confidence remain separate. Confidence parameters affect confidence labels, not the cleaning action thresholds. `auto` is a Kraken mode; this release does not add a new polishing mode.
 
-The shipped `ci/config.ci.yaml` is a small input profile, not a biological validation benchmark. Software tests create isolated synthetic data and configuration dynamically.
+The shipped `examples/ci/config.ci.yaml` is a small input profile, not a biological validation benchmark. Software tests create isolated synthetic data and configuration dynamically.

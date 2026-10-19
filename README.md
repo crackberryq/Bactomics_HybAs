@@ -17,13 +17,13 @@ conda activate hybas
 snakemake -s Hybas.smk setup_envs --use-conda --cores 4 --config setup_only=true
 ```
 
-`environment.yaml` provides Python 3.11, Snakemake 9.6.2 and YAML support. Rule environments are in `envs/`. Their post-deployment checks fail if required executables are missing or resolve outside the managed environment. Optional Medaka, Polypolish and annotation environments are selected only when needed by the run (or requested during setup).
+`environment.yaml` provides Python 3.11, Snakemake 9.6.2 and YAML support. Rule environments are in `workflow/envs/`. Their post-deployment checks fail if required executables are missing or resolve outside the managed environment. Optional Medaka, Polypolish and annotation environments are selected only when needed by the run (or requested during setup).
 
 An existing environment can be updated with `conda env update -n hybas -f environment.yaml`. Keep your workstation configuration and sample sheet when upgrading; compare them with the new examples instead of overwriting them.
 
 ## Configure a run
 
-Edit `config.yaml` and `samples.tsv` locally. `samples.tsv` is intentionally header-only; `samples.example.tsv` shows the columns. Paths are resolved from the working directory. `base_dir` is the directory containing isolate folders; database paths are beneath `base_dir/db` unless configured otherwise.
+Edit `config.yaml` and `samples.tsv` locally. `samples.tsv` is intentionally header-only; `examples/samples.example.tsv` shows the columns. Paths are resolved from the working directory. `base_dir` is the directory containing isolate folders; database paths are beneath `base_dir/db` unless configured otherwise.
 
 Each sample requires an `isolate` column. Optional columns are `target_taxid`, `busco_lineage` and `medaka_model`. Isolate names must be unique and contain only letters, digits, dots, underscores or hyphens, beginning with a letter or digit.
 
@@ -150,4 +150,4 @@ The dashboard launches Snakemake directly. It is not required for setup, executi
 
 ## Citation and license
 
-See [CITATION.cff](CITATION.cff) for citation metadata and [docs/LICENSE](docs/LICENSE) for license terms. Publication benchmark results belong to the version and inputs used to generate them; this update does not retroactively revalidate them.
+See [CITATION.cff](CITATION.cff) for citation metadata and [LICENSE](LICENSE) for license terms. Publication benchmark results belong to the version and inputs used to generate them; this update does not retroactively revalidate them.

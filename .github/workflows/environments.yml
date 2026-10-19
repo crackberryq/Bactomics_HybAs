@@ -1,9 +1,9 @@
 name: Native environment checks
 on:
   push:
-    paths: ['envs/**', 'environment.yaml', '.github/workflows/environments.yml']
+    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml']
   pull_request:
-    paths: ['envs/**', 'environment.yaml', '.github/workflows/environments.yml']
+    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,11 +24,11 @@ jobs:
         with:
           miniforge-version: latest
           activate-environment: check
-          environment-file: envs/${{ matrix.environment }}.yml
+          environment-file: workflow/envs/${{ matrix.environment }}.yml
           channels: conda-forge,bioconda
           channel-priority: strict
           conda-remove-defaults: true
-      - run: bash envs/${{ matrix.environment }}.post-deploy.sh
+      - run: bash workflow/envs/${{ matrix.environment }}.post-deploy.sh
 
   controller:
     runs-on: ubuntu-latest

@@ -51,7 +51,7 @@ import sys
 from pathlib import Path
 
 SOURCE_ROOT = os.path.abspath(workflow.basedir)
-sys.path.insert(0, SOURCE_ROOT)
+sys.path.insert(0, os.path.join(SOURCE_ROOT, "workflow", "lib"))
 from workflow_support import (VERSION, normalize_taxid, manual_taxid, validate_isolate_names,
     pair_illumina_files, validate_input_files, polish_plan, busco_db_ready as valid_busco_db,
     file_identity, require_fasta, write_json, quast_metric as read_quast_metric)
@@ -70,7 +70,7 @@ def as_bool(x):
     raise ValueError(f"Invalid boolean {x!r}; use true or false")
 
 configfile: "config.yaml"
-report: "report/workflow.rst"
+report: "workflow/report/workflow.rst"
 
 ###############################################################################
 # SECTION 1 — GLOBAL CONFIG
@@ -1106,7 +1106,7 @@ POLISH_MEM_MB = rule_memory("polishing", 4096)
 DB_CORE = [os.path.join(KRAKEN_DB_DIR, f) for f in ("hash.k2d", "opts.k2d", "taxo.k2d")]
 CONFIG_FILES = [os.path.abspath(x) for x in list(workflow.configfiles) if os.path.isfile(x)]
 SAMPLE_FILES = [SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) else []
-SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow_support.py")
+SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow", "lib", "workflow_support.py")
 SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE]
 EFFECTIVE_CONFIG = json.dumps(config, sort_keys=True, default=str)
 AWARE_SETTINGS = {k: v for k, v in globals().copy().items() if k.startswith("KRAKEN_") and isinstance(v, (str, bool, int, float))}
@@ -1407,7 +1407,7 @@ rule capture_env_assembly_global:
         env_python_version_global("assembly")
     params:
         outdir=provenance_conda_dir()
-    conda: "envs/assembly.yml"
+    conda: "workflow/envs/assembly.yml"
     message:
         "Capturing assembly environment manifest"
     shell:
@@ -1430,7 +1430,7 @@ rule capture_env_qc_global:
         env_python_version_global("qc")
     params:
         outdir=provenance_conda_dir()
-    conda: "envs/qc.yml"
+    conda: "workflow/envs/qc.yml"
     message:
         "Capturing QC environment manifest"
     shell:
@@ -1453,7 +1453,7 @@ rule capture_env_polishing_global:
         env_python_version_global("polishing")
     params:
         outdir=provenance_conda_dir()
-    conda: "envs/polishing.yml"
+    conda: "workflow/envs/polishing.yml"
     message:
         "Capturing polishing environment manifest"
     shell:
@@ -1476,7 +1476,7 @@ rule capture_env_medaka_global:
         env_python_version_global("medaka")
     params:
         outdir=provenance_conda_dir()
-    conda: "envs/medaka.yml"
+    conda: "workflow/envs/medaka.yml"
     message:
         "Capturing medaka environment manifest"
     shell:
@@ -1499,7 +1499,7 @@ rule capture_env_annotation_global:
         env_python_version_global("annotation")
     params:
         outdir=provenance_conda_dir()
-    conda: "envs/annotation.yml"
+    conda: "workflow/envs/annotation.yml"
     message:
         "Capturing annotation environment manifest"
     shell:
@@ -1590,7 +1590,7 @@ rule download_kraken_db:
         hashf=os.path.join(KRAKEN_DB_DIR, "hash.k2d"),
         optsf=os.path.join(KRAKEN_DB_DIR, "opts.k2d"),
         taxof=os.path.join(KRAKEN_DB_DIR, "taxo.k2d")
-    conda: "envs/qc.yml"
+    conda: "workflow/envs/qc.yml"
     log: os.path.join(BASE_DIR, "provenance", "databases", "kraken_build.log")
     resources: mem_mb=KRAKEN_MEM_MB, kraken_jobs=1
     threads: THREADS
@@ -1611,16 +1611,16 @@ rule download_kraken_db:
 
 rule download_busco_lineage:
     input:
-        checker=os.path.join(SOURCE_ROOT, "scripts", "check_database.py"), support=SUPPORT_FILE
+        checker=os.path.join(SOURCE_ROOT, "workflow", "scripts", "check_database.py"), support=SUPPORT_FILE
     output:
         touch(os.path.join(BUSCO_DB_DIR, "{lineage}", ".complete"))
     params:
         dbdir=BUSCO_DB_DIR,
         lineage_dir=lambda wc: os.path.join(BUSCO_DB_DIR, wc.lineage),
-        checker=os.path.join(SOURCE_ROOT, "scripts", "check_database.py"),
+        checker=os.path.join(SOURCE_ROOT, "workflow", "scripts", "check_database.py"),
         readiness=lambda wc: valid_busco_db(os.path.join(BUSCO_DB_DIR, wc.lineage)),
         dataset=lambda wc: file_identity(os.path.join(BUSCO_DB_DIR, wc.lineage, "dataset.cfg"))
-    conda: "envs/qc.yml"
+    conda: "workflow/envs/qc.yml"
     log: os.path.join(BASE_DIR, "provenance", "databases", "busco_{lineage}.log")
     threads: 1
     message: "Prepare and verify BUSCO lineage {wildcards.lineage}"
@@ -1661,7 +1661,7 @@ rule system_info:
     output:
         report(
             system_info_tsv("{isolate}"),
-            caption="report/system_info_tsv.rst",
+            caption="workflow/report/system_info_tsv.rst",
             category="Run metadata",
             subcategory="System info",
         )
@@ -1684,7 +1684,7 @@ rule workflow_provenance:
     output:
         report(
             workflow_provenance_tsv("{isolate}"),
-            caption="report/workflow_provenance_tsv.rst",
+            caption="workflow/report/workflow_provenance_tsv.rst",
             category="Run metadata",
             subcategory="Workflow provenance",
         )
@@ -1734,7 +1734,7 @@ rule merge_illumina:
     benchmark:
         bench("{isolate}", "merge_illumina")
     conda:
-        "envs/assembly.yml"
+        "workflow/envs/assembly.yml"
     threads: 1
     message:
         logmsg(1, "Merging Illumina lanes")
@@ -1774,7 +1774,7 @@ rule merge_ont:
     benchmark:
         bench("{isolate}", "merge_ont")
     conda:
-        "envs/assembly.yml"
+        "workflow/envs/assembly.yml"
     threads: 1
     message:
         logmsg(2, "Merging ONT FASTQ")
@@ -1812,7 +1812,7 @@ rule fastqc_pre:
     log:
         os.path.join(logs_dir("{isolate}"), "fastqc_pre.log")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 2
     message:
         logmsg(3, "FastQC raw merged Illumina")
@@ -1838,7 +1838,7 @@ rule nanoplot_raw:
     log:
         os.path.join(logs_dir("{isolate}"), "nanoplot_raw.log")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 2
     message:
         logmsg(4, "NanoPlot raw ONT")
@@ -1868,13 +1868,13 @@ rule kraken2_illumina:
     output:
         kraken=report(
             os.path.join(kraken_dir("{isolate}"), "illumina.kraken2.txt"),
-            caption="report/kraken_report.rst",
+            caption="workflow/report/kraken_report.rst",
             category="QC",
             subcategory="Kraken2",
         ),
         report_txt=report(
             os.path.join(kraken_dir("{isolate}"), "illumina.report.txt"),
-            caption="report/kraken_report.rst",
+            caption="workflow/report/kraken_report.rst",
             category="QC",
             subcategory="Kraken2",
         )
@@ -1888,7 +1888,7 @@ rule kraken2_illumina:
     benchmark:
         bench("{isolate}", "kraken2_illumina")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     resources:
         mem_mb=KRAKEN_MEM_MB, kraken_jobs=1
     threads: THREADS
@@ -1923,13 +1923,13 @@ rule kraken2_nanopore:
     output:
         kraken=report(
             os.path.join(kraken_dir("{isolate}"), "nanopore.kraken2.txt"),
-            caption="report/kraken_report.rst",
+            caption="workflow/report/kraken_report.rst",
             category="QC",
             subcategory="Kraken2",
         ),
         report_txt=report(
             os.path.join(kraken_dir("{isolate}"), "nanopore.report.txt"),
-            caption="report/kraken_report.rst",
+            caption="workflow/report/kraken_report.rst",
             category="QC",
             subcategory="Kraken2",
         )
@@ -1943,7 +1943,7 @@ rule kraken2_nanopore:
     benchmark:
         bench("{isolate}", "kraken2_nanopore")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     resources:
         mem_mb=KRAKEN_MEM_MB, kraken_jobs=1
     threads: THREADS
@@ -1981,7 +1981,7 @@ rule kraken_decision:
     output:
         report(
             kraken_decision_tsv("{isolate}"),
-            caption="report/run_summary_tsv.rst",
+            caption="workflow/report/run_summary_tsv.rst",
             category="Run metadata",
             subcategory="Kraken decision",
         )
@@ -2090,7 +2090,7 @@ rule clean_illumina:
     benchmark:
         bench("{isolate}", "clean_illumina")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 4
     message:
         logmsg(7, "Illumina cleaning / passthrough")
@@ -2155,7 +2155,7 @@ rule clean_ont:
     benchmark:
         bench("{isolate}", "clean_ont")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 4
     message:
         logmsg(8, "ONT cleaning / passthrough")
@@ -2209,13 +2209,13 @@ rule fastp_trim:
         r2=trim_r2("{isolate}"),
         html=report(
             os.path.join(fastp_dir("{isolate}"), "fastp.html"),
-            caption="report/fastp_html.rst",
+            caption="workflow/report/fastp_html.rst",
             category="QC",
             subcategory="fastp",
         ),
         json=report(
             os.path.join(fastp_dir("{isolate}"), "fastp.json"),
-            caption="report/fastp_json.rst",
+            caption="workflow/report/fastp_json.rst",
             category="QC",
             subcategory="fastp",
         )
@@ -2228,7 +2228,7 @@ rule fastp_trim:
     benchmark:
         bench("{isolate}", "fastp_trim")
     conda:
-        "envs/assembly.yml"
+        "workflow/envs/assembly.yml"
     threads: THREADS
     message:
         logmsg(9, "fastp trimming")
@@ -2264,7 +2264,7 @@ rule filtlong_ont:
     benchmark:
         bench("{isolate}", "filtlong_ont")
     conda:
-        "envs/assembly.yml"
+        "workflow/envs/assembly.yml"
     threads: THREADS
     message:
         logmsg(10, "Filtlong ONT")
@@ -2295,7 +2295,7 @@ rule nanoplot_filt:
     log:
         os.path.join(logs_dir("{isolate}"), "nanoplot_filt.log")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 2
     message:
         logmsg(11, "NanoPlot filtered ONT")
@@ -2346,7 +2346,7 @@ rule skip_reasons:
     output:
         report(
             skip_reasons_tsv("{isolate}"),
-            caption="report/skip_reasons_tsv.rst",
+            caption="workflow/report/skip_reasons_tsv.rst",
             category="Run metadata",
             subcategory="Skip reasons",
         )
@@ -2449,7 +2449,7 @@ rule unicycler:
     benchmark:
         bench("{isolate}", "unicycler")
     conda:
-        "envs/assembly.yml"
+        "workflow/envs/assembly.yml"
     resources:
         mem_mb=ASSEMBLY_MEM_MB, disk_mb=rule_memory("assembly_disk", 20000)
     threads: THREADS
@@ -2509,7 +2509,7 @@ rule racon_map:
     benchmark:
         bench("{isolate}", "racon_map_{i}")
     conda:
-        "envs/assembly.yml"
+        "workflow/envs/assembly.yml"
     resources:
         mem_mb=POLISH_MEM_MB
     threads: THREADS
@@ -2545,7 +2545,7 @@ rule racon_consensus:
     benchmark:
         bench("{isolate}", "racon_consensus_{i}")
     conda:
-        "envs/assembly.yml"
+        "workflow/envs/assembly.yml"
     resources:
         mem_mb=POLISH_MEM_MB
     threads: THREADS
@@ -2583,7 +2583,7 @@ rule medaka:
     benchmark:
         bench("{isolate}", "medaka")
     conda:
-        "envs/medaka.yml"
+        "workflow/envs/medaka.yml"
     resources:
         mem_mb=POLISH_MEM_MB
     threads: THREADS
@@ -2619,7 +2619,7 @@ rule bwa_index:
     log:
         os.path.join(logs_dir("{isolate}"), "bwa_index.log")
     benchmark: bench("{isolate}", "bwa_index")
-    conda: "envs/polishing.yml"
+    conda: "workflow/envs/polishing.yml"
     resources: mem_mb=POLISH_MEM_MB
     threads: 1
     message: "Index assembly for short-read polishing: {wildcards.isolate}"
@@ -2643,7 +2643,7 @@ rule polypolish_align:
         r1=polishing_sam("{isolate}", 1), r2=polishing_sam("{isolate}", 2)
     log: os.path.join(logs_dir("{isolate}"), "polypolish_align.log")
     benchmark: bench("{isolate}", "polypolish_align")
-    conda: "envs/polishing.yml"
+    conda: "workflow/envs/polishing.yml"
     resources: mem_mb=POLISH_MEM_MB, disk_mb=rule_memory("mapping_disk", 12000)
     threads: THREADS
     message: "Prepare separate all-alignment SAMs: {wildcards.isolate}"
@@ -2671,7 +2671,7 @@ rule illumina_map:
         sort_memory=lambda wc, threads: max(64, int(POLISH_MEM_MB * 0.7 / max(1, threads)))
     log: os.path.join(logs_dir("{isolate}"), "illumina_map.log")
     benchmark: bench("{isolate}", "illumina_map")
-    conda: "envs/polishing.yml"
+    conda: "workflow/envs/polishing.yml"
     resources: mem_mb=POLISH_MEM_MB, disk_mb=rule_memory("mapping_disk", 12000)
     threads: THREADS
     message: "Create paired-end mapping QC: {wildcards.isolate}"
@@ -2698,7 +2698,7 @@ rule polypolish:
         outdir=lambda wc: work_polypolish_dir(wc.isolate)
     log: os.path.join(logs_dir("{isolate}"), "polypolish.log")
     benchmark: bench("{isolate}", "polypolish")
-    conda: "envs/polishing.yml"
+    conda: "workflow/envs/polishing.yml"
     resources: mem_mb=POLISH_MEM_MB
     threads: 1
     message: "Polypolish: {wildcards.isolate}"
@@ -2772,7 +2772,7 @@ rule final_copy:
     input:
         source=lambda wc: final_source_for(wc.isolate), execution=polish_execution("{isolate}")
     output:
-        report(final_asm("{isolate}"), caption="report/final_assembly.rst", category="Assembly", subcategory="Final")
+        report(final_asm("{isolate}"), caption="workflow/report/final_assembly.rst", category="Assembly", subcategory="Final")
     params:
         outdir=lambda wc: work_final_dir(wc.isolate)
     log: os.path.join(logs_dir("{isolate}"), "final_copy.log")
@@ -2793,8 +2793,8 @@ rule quast:
     input:
         final_asm("{isolate}")
     output:
-        txt=report(quast_txt("{isolate}"), caption="report/quast_txt.rst", category="QC", subcategory="QUAST"),
-        tsv=report(quast_tsv("{isolate}"), caption="report/quast_tsv.rst", category="QC", subcategory="QUAST")
+        txt=report(quast_txt("{isolate}"), caption="workflow/report/quast_txt.rst", category="QC", subcategory="QUAST"),
+        tsv=report(quast_tsv("{isolate}"), caption="workflow/report/quast_tsv.rst", category="QC", subcategory="QUAST")
     params:
         outdir=lambda wc: quast_dir(wc.isolate)
     log:
@@ -2802,7 +2802,7 @@ rule quast:
     benchmark:
         bench("{isolate}", "quast")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: THREADS
     message:
         logmsg(18, "QUAST")
@@ -2820,8 +2820,8 @@ rule busco:
     input:
         final_asm("{isolate}")
     output:
-        txt=report(busco_txt("{isolate}"), caption="report/busco_txt.rst", category="QC", subcategory="BUSCO"),
-        html=report(busco_html("{isolate}"), caption="report/busco_html.rst", category="QC", subcategory="BUSCO")
+        txt=report(busco_txt("{isolate}"), caption="workflow/report/busco_txt.rst", category="QC", subcategory="BUSCO"),
+        html=report(busco_html("{isolate}"), caption="workflow/report/busco_html.rst", category="QC", subcategory="BUSCO")
     params:
         enabled=RUN_BUSCO,
         outdir=lambda wc: busco_dir(wc.isolate),
@@ -2833,7 +2833,7 @@ rule busco:
     benchmark:
         bench("{isolate}", "busco")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     resources:
         mem_mb=rule_memory("busco", 4096)
     threads: THREADS
@@ -2881,19 +2881,19 @@ rule seqkit_stats:
     output:
         illumina=report(
             seqkit_illumina("{isolate}"),
-            caption="report/seqkit_tsv.rst",
+            caption="workflow/report/seqkit_tsv.rst",
             category="QC",
             subcategory="seqkit",
         ),
         ont=report(
             seqkit_ont("{isolate}"),
-            caption="report/seqkit_tsv.rst",
+            caption="workflow/report/seqkit_tsv.rst",
             category="QC",
             subcategory="seqkit",
         ),
         asm=report(
             seqkit_assembly("{isolate}"),
-            caption="report/seqkit_tsv.rst",
+            caption="workflow/report/seqkit_tsv.rst",
             category="QC",
             subcategory="seqkit",
         )
@@ -2902,7 +2902,7 @@ rule seqkit_stats:
     log:
         os.path.join(logs_dir("{isolate}"), "seqkit_stats.log")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 1
     message:
         logmsg(20, "seqkit summaries")
@@ -2945,7 +2945,7 @@ rule coverage_estimate:
     output:
         note=report(
             coverage_note("{isolate}"),
-            caption="report/coverage_txt.rst",
+            caption="workflow/report/coverage_txt.rst",
             category="QC",
             subcategory="Coverage",
         ),
@@ -2955,7 +2955,7 @@ rule coverage_estimate:
     log:
         os.path.join(logs_dir("{isolate}"), "coverage_estimate.log")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 1
     message:
         logmsg(21, "ONT coverage estimate")
@@ -2980,7 +2980,7 @@ rule coverage_estimate:
 rule multiqc:
     input:
         custom=multiqc_custom_tsv("{isolate}"),
-        config=os.path.join(SOURCE_ROOT, "multiqc_config.yaml"),
+        config=os.path.join(SOURCE_ROOT, "workflow", "config", "multiqc_config.yaml"),
         quast_txt=quast_txt("{isolate}"),
         quast_tsv=quast_tsv("{isolate}"),
         busco=busco_txt("{isolate}"),
@@ -2999,7 +2999,7 @@ rule multiqc:
     output:
         report(
             multiqc_html("{isolate}"),
-            caption="report/multiqc.rst",
+            caption="workflow/report/multiqc.rst",
             category="QC",
             subcategory="MultiQC",
         )
@@ -3012,7 +3012,7 @@ rule multiqc:
     benchmark:
         bench("{isolate}", "multiqc")
     conda:
-        "envs/qc.yml"
+        "workflow/envs/qc.yml"
     threads: 1
     message:
         logmsg(22, "MultiQC")
@@ -3038,8 +3038,8 @@ rule prokka:
     input:
         final_asm("{isolate}")
     output:
-        gff=report(prokka_gff("{isolate}"), caption="report/prokka_gff.rst", category="Annotation", subcategory="Prokka"),
-        faa=report(prokka_faa("{isolate}"), caption="report/prokka_faa.rst", category="Annotation", subcategory="Prokka")
+        gff=report(prokka_gff("{isolate}"), caption="workflow/report/prokka_gff.rst", category="Annotation", subcategory="Prokka"),
+        faa=report(prokka_faa("{isolate}"), caption="workflow/report/prokka_faa.rst", category="Annotation", subcategory="Prokka")
     params:
         enabled=RUN_PROKKA,
         outdir=lambda wc: annotation_dir(wc.isolate)
@@ -3048,7 +3048,7 @@ rule prokka:
     benchmark:
         bench("{isolate}", "prokka")
     conda:
-        "envs/annotation.yml" if RUN_PROKKA else "envs/controller.yml"
+        "workflow/envs/annotation.yml" if RUN_PROKKA else "workflow/envs/controller.yml"
     resources:
         mem_mb=rule_memory("prokka", 4096)
     threads: THREADS
@@ -3083,7 +3083,7 @@ rule tool_versions:
     output:
         report(
             tool_versions_tsv("{isolate}"),
-            caption="report/tool_versions_tsv.rst",
+            caption="workflow/report/tool_versions_tsv.rst",
             category="Run metadata",
             subcategory="Tool versions",
         )
@@ -3167,7 +3167,7 @@ rule checksums:
     output:
         report(
             checksums_tsv("{isolate}"),
-            caption="report/checksums_tsv.rst",
+            caption="workflow/report/checksums_tsv.rst",
             category="Run metadata",
             subcategory="Checksums",
         )
@@ -3226,8 +3226,8 @@ rule run_summary:
         fastp_json=os.path.join(fastp_dir("{isolate}"), "fastp.json"),
         tools=tool_versions_tsv("{isolate}")
     output:
-        tsv=report(run_summary_tsv("{isolate}"), caption="report/run_summary_tsv.rst", category="Run metadata", subcategory="TSV"),
-        json=report(run_summary_json("{isolate}"), caption="report/run_summary_json.rst", category="Run metadata", subcategory="JSON")
+        tsv=report(run_summary_tsv("{isolate}"), caption="workflow/report/run_summary_tsv.rst", category="Run metadata", subcategory="TSV"),
+        json=report(run_summary_json("{isolate}"), caption="workflow/report/run_summary_json.rst", category="Run metadata", subcategory="JSON")
     run:
         import subprocess
 
@@ -3550,7 +3550,7 @@ rule qc_assessment:
     output:
         report(
             os.path.join(metadata_dir("{isolate}"), "qc_assessment.tsv"),
-            caption="report/qc_assessment_tsv.rst",
+            caption="workflow/report/qc_assessment_tsv.rst",
             category="Run metadata",
             subcategory="QC assessment",
         )

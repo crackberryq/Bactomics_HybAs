@@ -9,7 +9,7 @@ import sys
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "workflow" / "lib"))
 from workflow_support import manual_taxid, normalize_taxid, pair_illumina_files, polish_plan, validate_isolate_names, busco_db_ready, quast_metric
 
 DEFAULTS = dict(KRAKEN_AUTO_PREFER_SPECIES_MIN_PCT=90., KRAKEN_AUTO_PASSTHROUGH_MIN_PCT=95.,

@@ -1,5 +1,5 @@
-base_dir: ci
-sample_sheet: ci/samples.ci.tsv
+base_dir: examples/ci
+sample_sheet: examples/ci/samples.ci.tsv
 workflow_version: HybAs-9.0.0-AWARE
 threads: 4
 keep_percent: 95
