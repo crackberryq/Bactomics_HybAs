@@ -114,6 +114,8 @@ def test_incomplete_busco_directory_is_not_ready(tmp_path):
     (tmp_path/'hmms').mkdir()
     for path in ['dataset.cfg','scores_cutoff','lengths_cutoff','hmms/test.hmm']: (tmp_path/path).write_text('fixture\n')
     assert busco_db_ready(tmp_path)
+    (tmp_path/"scores_cutoff").write_text("")
+    assert not busco_db_ready(tmp_path)
 
 
 def test_quast_native_and_transposed_tables(tmp_path):

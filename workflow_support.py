@@ -98,7 +98,9 @@ def busco_db_ready(path):
             and root.joinpath("dataset.cfg").stat().st_size > 0
             and any(p.stat().st_size > 0 for p in root.glob("hmms/*.hmm"))
             and root.joinpath("scores_cutoff").is_file()
-            and root.joinpath("lengths_cutoff").is_file())
+            and root.joinpath("scores_cutoff").stat().st_size > 0
+            and root.joinpath("lengths_cutoff").is_file()
+            and root.joinpath("lengths_cutoff").stat().st_size > 0)
 
 
 def sha256_file(path):
