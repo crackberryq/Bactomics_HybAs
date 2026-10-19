@@ -1,0 +1,8 @@
+# Native Snakemake scheduling defaults. Adjust mem_mb to the RAM available to
+# this workflow (including the WSL VM limit). Override with --resources if needed.
+resources:
+  mem_mb: 16000
+  kraken_jobs: 1
+rerun-incomplete: true
+printshellcmds: false
+show-failed-logs: true

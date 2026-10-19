@@ -1,6 +1,9 @@
-name: hybas_master_test
+name: hybas
 channels:
   - conda-forge
   - bioconda
-  - defaults
-prefix: /home/jimi/miniconda3/envs/hybas_master_test
+dependencies:
+  - python=3.11
+  - snakemake-minimal=9.6.2
+  - pyyaml
+  - pip
