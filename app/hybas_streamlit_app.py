@@ -46,6 +46,7 @@ LOG_FILE = ROOT / ".hybas_runtime.log"
 VAL_LOG_FILE = ROOT / ".validation_runtime.log"
 VAL_SNAKEFILE_NAME = "HybAs_validation.smk"
 VAL_CONFIG_NAME = "validation_config.yaml"
+VALIDATION_AVAILABLE = (VAL_DIR / VAL_SNAKEFILE_NAME).is_file() and (VAL_DIR / VAL_CONFIG_NAME).is_file()
 
 st.markdown(
     """
@@ -228,7 +229,7 @@ with tab_run:
                     status.update(label="Integrity Check Complete", state="complete")
 
             if st.button("📦 Install Conda Envs", disabled=currently_running):
-                st.session_state.prepared_cmd = f"snakemake -s {cmd_path(DEFAULTS['main_snakefile'], ROOT)} setup_envs --use-conda -c 4"
+                st.session_state.prepared_cmd = f"snakemake -s {cmd_path(DEFAULTS['main_snakefile'], ROOT)} setup_envs --use-conda -c 4 --config setup_only=true"
                 st.session_state.confirm_step = 0
 
         with c2:
@@ -459,7 +460,7 @@ with tab_config:
 
             run_workflow_version = st.text_input(
                 "Workflow version",
-                value=str(cfg_run.get("workflow_version", "HybAs-8.8-ieee-batch")),
+                value=str(cfg_run.get("workflow_version", "HybAs-9.0.0-AWARE")),
                 disabled=currently_running,
                 key="cfg_run_workflow_version",
             )
@@ -705,7 +706,7 @@ with tab_config:
             val_run_plots = st.toggle("run_plots", value=bool(cfg_val.get("run_plots", True)), disabled=currently_running, key="cfg_val_run_plots")
             val_enable_multiqc = st.toggle("enable_multiqc", value=bool(cfg_val.get("enable_multiqc", True)), disabled=currently_running, key="cfg_val_enable_multiqc")
 
-        if st.button("💾 Save validation_config.yaml", disabled=currently_running, key="save_val_config"):
+        if st.button("💾 Save validation_config.yaml", disabled=currently_running or not VALIDATION_AVAILABLE, key="save_val_config"):
             new_val_cfg = {
                 "isolate": val_isolate,
                 "run_phase1": bool(val_run_phase1),
@@ -724,6 +725,8 @@ with tab_config:
 with tab_comp:
     st.markdown('<div class="soft-card">', unsafe_allow_html=True)
     st.subheader("🧮 Validation Suite Hub")
+    if not VALIDATION_AVAILABLE:
+        st.info("The separate phase 1–3 validation bundle is not installed. This repository includes software regression tests under tests/.")
 
     val_samples_path = DEFAULTS["ci_samples"] if op_mode == "ci" else DEFAULTS["samples_tsv"]
     val_iso_df = pd.read_csv(val_samples_path, sep="\t") if val_samples_path.exists() else pd.DataFrame()
@@ -749,9 +752,9 @@ with tab_comp:
     st.markdown(f'<div class="command-box">CONDARC=$(pwd)/.condarc {val_cmd}</div>', unsafe_allow_html=True)
 
     v_ctrl1, v_ctrl2, v_ctrl3 = st.columns(3)
-    val_start = v_ctrl1.button("▶ START VALIDATION", type="primary", disabled=currently_running, key="b_val_start")
+    val_start = v_ctrl1.button("▶ START VALIDATION", type="primary", disabled=currently_running or not VALIDATION_AVAILABLE, key="b_val_start")
     val_stop = v_ctrl2.button("⏹ STOP VALIDATION", disabled=not st.session_state.val_proc_pid, key="b_val_stop")
-    if v_ctrl3.button("🔓 Unlock Validation", disabled=currently_running, key="b_val_unlock"):
+    if v_ctrl3.button("🔓 Unlock Validation", disabled=currently_running or not VALIDATION_AVAILABLE, key="b_val_unlock"):
         subprocess.run(
             f"CONDARC={quoted(ROOT / '.condarc')} snakemake -s {cmd_path(VAL_DIR / VAL_SNAKEFILE_NAME, VAL_DIR)} --unlock",
             shell=True,

@@ -1,8 +1,7 @@
 name: hybas-annotation
 channels:
-  - conda-forge
-  - bioconda
-channel_priority: strict
+- conda-forge
+- bioconda
 dependencies:
-  - python=3.11
-  - prokka=1.15.6
+- python=3.11
+- prokka=1.15.6

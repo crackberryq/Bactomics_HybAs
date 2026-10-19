@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs 8.8-ieee-batch (kraken-decision + polypolish-hardened)
+# Snakefile – HybAs 9.0.0-AWARE (native Snakemake reliability update)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -47,6 +47,14 @@ import shlex
 import hashlib
 import platform
 import re
+import sys
+from pathlib import Path
+
+SOURCE_ROOT = os.path.abspath(workflow.basedir)
+sys.path.insert(0, SOURCE_ROOT)
+from workflow_support import (VERSION, normalize_taxid, manual_taxid, validate_isolate_names,
+    pair_illumina_files, validate_input_files, polish_plan, busco_db_ready as valid_busco_db,
+    file_identity, require_fasta, write_json, quast_metric as read_quast_metric)
 from datetime import datetime
 from snakemake.io import report, directory, touch
 
@@ -59,7 +67,7 @@ def as_bool(x):
             return True
         if v in {"false", "0", "no", "n", "off"}:
             return False
-    return bool(x)
+    raise ValueError(f"Invalid boolean {x!r}; use true or false")
 
 configfile: "config.yaml"
 report: "report/workflow.rst"
@@ -68,14 +76,14 @@ report: "report/workflow.rst"
 # SECTION 1 — GLOBAL CONFIG
 ###############################################################################
 
-BASE_DIR                 = config.get("base_dir", ".")
+BASE_DIR                 = os.path.abspath(os.path.expanduser(config.get("base_dir", ".")))
 SAMPLE_SHEET             = config.get("sample_sheet", "")
 THREADS                  = int(config.get("threads", 8))
 KEEP_PERCENT             = int(config.get("keep_percent", 95))
 RACON_ROUNDS             = int(config.get("racon_rounds", 2))
 DEFAULT_BUSCO_LINEAGE    = str(config.get("busco_lineage", "bacteria_odb10"))
 DEFAULT_MEDAKA_MODEL     = str(config.get("medaka_model", ""))
-DEFAULT_TARGET_TAXID     = str(config.get("target_taxid", ""))
+DEFAULT_TARGET_TAXID     = manual_taxid(config.get("target_taxid"))
 
 RUN_KRAKEN               = as_bool(config.get("run_kraken", True))
 RUN_BUSCO                = as_bool(config.get("run_busco", True))
@@ -92,7 +100,8 @@ ALLOW_ILLUMINA_ONLY      = as_bool(config.get("allow_illumina_only", True))
 REQUIRE_TAXID_FOR_KRAKEN = as_bool(config.get("require_target_taxid_for_kraken", False))
 
 POLISH_MODE              = str(config.get("polish_mode", "tripolish")).strip().lower()
-WORKFLOW_VERSION         = str(config.get("workflow_version", "HybAs-8.8-ieee-batch"))
+WORKFLOW_VERSION         = VERSION
+CONFIG_VERSION_LABEL     = str(config.get("workflow_version", VERSION))
 
 DB_ROOT                  = os.path.join(BASE_DIR, config.get("db_root", "db"))
 KRAKEN_DB_NAME           = str(config.get("kraken_db_name", "standard"))
@@ -122,7 +131,6 @@ VALID_KRAKEN_DECISION_MODES = {"off", "manual", "auto", "aware"}
 # - auto   -> Kraken runs
 # - aware  -> Kraken runs
 KRAKEN_PROFILE_ENABLED = (KRAKEN_DECISION_MODE in {"manual", "auto", "aware"})
-
 
 
 if POLISH_MODE not in VALID_POLISH_MODES:
@@ -167,7 +175,7 @@ if KRAKEN_DECISION_MODE in {"manual", "auto", "aware"} and not RUN_KRAKEN:
         "Set run_kraken=true or switch kraken_decision_mode='off'."
     )
     
-if not SAMPLE_SHEET and "isolate" not in config:
+if not SETUP_ONLY and not ADMIN_MODE and not SAMPLE_SHEET and "isolate" not in config:
     raise ValueError("Provide sample_sheet or legacy isolate in config.yaml")
 
 ###############################################################################
@@ -176,25 +184,17 @@ if not SAMPLE_SHEET and "isolate" not in config:
 
 def kraken_db_ready():
     expected = ["hash.k2d", "opts.k2d", "taxo.k2d"]
-    return all(os.path.exists(os.path.join(KRAKEN_DB_DIR, f)) for f in expected)
+    return all(os.path.isfile(os.path.join(KRAKEN_DB_DIR, f)) and os.path.getsize(os.path.join(KRAKEN_DB_DIR, f)) > 0 for f in expected)
 
 def busco_lineage_dir(lineage):
     return os.path.join(BUSCO_DB_DIR, lineage)
 
 def busco_db_ready(lineage):
-    return os.path.isdir(busco_lineage_dir(lineage))
+    return valid_busco_db(busco_lineage_dir(lineage))
 
 ###############################################################################
 # SECTION 3 — SAMPLE SHEET LOADING
 ###############################################################################
-
-def normalize_taxid(x):
-    s = str(x or "").strip()
-    if not s:
-        return ""
-    if s.endswith(".0"):
-        s = s[:-2]
-    return s
 
 def safe_float(x, default=0.0):
     try:
@@ -206,7 +206,7 @@ def read_sample_sheet(path):
     rows = []
     with open(path, newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
-        if "isolate" not in reader.fieldnames:
+        if not reader.fieldnames or "isolate" not in reader.fieldnames:
             raise ValueError("samples.tsv must contain column 'isolate'")
         for row in reader:
             iso = str(row.get("isolate", "")).strip()
@@ -214,13 +214,15 @@ def read_sample_sheet(path):
                 continue
             rows.append({
                 "isolate": iso,
-                "target_taxid": normalize_taxid(row.get("target_taxid", "")),
+                "target_taxid": manual_taxid(row.get("target_taxid")),
                 "busco_lineage": str(row.get("busco_lineage", "") or "").strip(),
                 "medaka_model": str(row.get("medaka_model", "") or "").strip(),
             })
     return rows
 
-if SAMPLE_SHEET:
+if (SETUP_ONLY or ADMIN_MODE) and (not SAMPLE_SHEET or not os.path.exists(SAMPLE_SHEET)):
+    SAMPLE_ROWS = []
+elif SAMPLE_SHEET:
     if not os.path.exists(SAMPLE_SHEET):
         raise ValueError(f"sample_sheet not found: {SAMPLE_SHEET}")
     SAMPLE_ROWS = read_sample_sheet(SAMPLE_SHEET)
@@ -232,10 +234,11 @@ else:
         "medaka_model": str(config.get("medaka_model", "") or "").strip(),
     }]
 
-if not SAMPLE_ROWS:
+if not SAMPLE_ROWS and not (SETUP_ONLY or ADMIN_MODE):
     raise ValueError("No isolates found in sample sheet/config")
 
 SAMPLES = [r["isolate"] for r in SAMPLE_ROWS]
+validate_isolate_names(SAMPLES)
 SAMPLE_INFO = {r["isolate"]: r for r in SAMPLE_ROWS}
 
 ###############################################################################
@@ -337,7 +340,6 @@ def skip_reasons_tsv(i): return os.path.join(metadata_dir(i), "skip_reasons.tsv"
 def kraken_decision_tsv(i): return os.path.join(metadata_dir(i), "kraken_decision.tsv")
 
 
-
 # seqkit / coverage
 def seqkit_illumina(i): return os.path.join(seqkit_dir(i), "illumina_pre.tsv")
 def seqkit_ont(i): return os.path.join(seqkit_dir(i), "ont.tsv")
@@ -413,7 +415,7 @@ def choose_platform_cleaning_decision(mode, selected_taxid, platform_pct, platfo
 # PROVENANCE HELPERS
 ###############################################################################
 
-PROJECT_CONDARC = os.path.join(os.getcwd(), ".condarc")
+PROJECT_CONDARC = os.path.abspath(os.environ.get("CONDARC", os.path.join(SOURCE_ROOT, ".condarc")))
 
 def provenance_dir():
     return os.path.join(BASE_DIR, "provenance")
@@ -812,8 +814,8 @@ def choose_selected_kraken_target(mode, manual_target_taxid, illumina_report, on
         ont_pct = parse_kraken_report_target_fraction(ont_report, manual_target_taxid)
 
         metric, metric_mode = combine_platform_values(
-            illumina_pct if os.path.getsize(illumina_report) > 0 else None,
-            ont_pct if os.path.getsize(ont_report) > 0 else None,
+            illumina_pct if os.path.isfile(illumina_report) and os.path.getsize(illumina_report) > 0 else None,
+            ont_pct if os.path.isfile(ont_report) and os.path.getsize(ont_report) > 0 else None,
             use_both=KRAKEN_AUTO_USE_BOTH_PLATFORMS,
         )
 
@@ -840,8 +842,8 @@ def choose_selected_kraken_target(mode, manual_target_taxid, illumina_report, on
             illumina_pct = parse_kraken_report_target_fraction(illumina_report, manual_target_taxid)
             ont_pct = parse_kraken_report_target_fraction(ont_report, manual_target_taxid)
             metric, metric_mode = combine_platform_values(
-                illumina_pct if os.path.getsize(illumina_report) > 0 else None,
-                ont_pct if os.path.getsize(ont_report) > 0 else None,
+                illumina_pct if os.path.isfile(illumina_report) and os.path.getsize(illumina_report) > 0 else None,
+                ont_pct if os.path.isfile(ont_report) and os.path.getsize(ont_report) > 0 else None,
                 use_both=KRAKEN_AUTO_USE_BOTH_PLATFORMS,
             )
 
@@ -952,115 +954,6 @@ def top_two_meaningful_candidates(report_path):
     return top1, top2
 
 def compute_platform_agreement(illumina_report, ont_report):
-    illumina_present = os.path.exists(illumina_report) and os.path.getsize(illumina_report) > 0
-    ont_present = os.path.exists(ont_report) and os.path.getsize(ont_report) > 0
-
-    if illumina_present and not ont_present:
-        return 1.0, "single_platform_illumina_only"
-    if ont_present and not illumina_present:
-        return 1.0, "single_platform_ont_only"
-    if not illumina_present and not ont_present:
-        return 0.0, "no_inference"
-
-    i = infer_target_from_kraken_report(illumina_report)
-    o = infer_target_from_kraken_report(ont_report)
-
-    if not i["taxid"] or not o["taxid"]:
-        return 0.0, "no_inference"
-
-    if i["taxid"] == o["taxid"]:
-        return 1.0, "exact_taxid_match"
-
-    if i["rank"] == "S" and o["rank"] == "S":
-        i_name = i["name"].split()[0] if i["name"] else ""
-        o_name = o["name"].split()[0] if o["name"] else ""
-        if i_name and i_name == o_name:
-            return 0.5, "same_genus_different_species"
-
-    return 0.0, "discordant_targets"
-
-def compute_taxonomic_confidence(illumina_report, ont_report, selected_taxid):
-    selected_taxid = normalize_taxid(selected_taxid)
-
-    if not selected_taxid:
-        return {
-            "runner_up_taxid": "",
-            "runner_up_name": "NA",
-            "runner_up_pct": 0.0,
-            "delta_pct": 0.0,
-            "platform_agreement_score": 0.0,
-            "platform_agreement_reason": "no_selected_target",
-            "decision_confidence": "low",
-            "awareness_state": "fail_no_target"
-        }
-
-    top1_i, top2_i = top_two_meaningful_candidates(illumina_report)
-    top1_o, top2_o = top_two_meaningful_candidates(ont_report)
-
-    illumina_present = os.path.exists(illumina_report) and os.path.getsize(illumina_report) > 0
-    ont_present = os.path.exists(ont_report) and os.path.getsize(ont_report) > 0
-
-    selected_pct_i = parse_kraken_report_target_fraction(illumina_report, selected_taxid) if illumina_present else None
-    selected_pct_o = parse_kraken_report_target_fraction(ont_report, selected_taxid) if ont_present else None
-
-    selected_pct, selected_pct_mode = combine_platform_values(
-        selected_pct_i,
-        selected_pct_o,
-        use_both=KRAKEN_AUTO_USE_BOTH_PLATFORMS,
-    )
-
-    runner_candidates = []
-    for x in [top1_i, top2_i, top1_o, top2_o]:
-        if x and normalize_taxid(x["taxid"]) != selected_taxid:
-            runner_candidates.append(x)
-
-    runner_candidates = sorted(runner_candidates, key=lambda x: x["pct"], reverse=True)
-    runner = runner_candidates[0] if runner_candidates else None
-
-    runner_pct = runner["pct"] if runner else 0.0
-    delta_pct = max(selected_pct - runner_pct, 0.0)
-
-    agreement_score, agreement_reason = compute_platform_agreement(illumina_report, ont_report)
-
-    if (
-        selected_pct >= KRAKEN_AWARE_HIGH_TARGET_MIN_PCT
-        and delta_pct >= KRAKEN_AWARE_DELTA_MIN_PCT
-        and agreement_score >= 0.5
-    ):
-        confidence = "high"
-        state = "clean_stable"
-    elif (
-        selected_pct >= KRAKEN_AWARE_MODERATE_TARGET_MIN_PCT
-        and delta_pct >= KRAKEN_AWARE_MODERATE_DELTA_MIN_PCT
-    ):
-        confidence = "moderate"
-        state = "clean_filterable"
-    elif selected_pct > 0:
-        confidence = "low"
-        state = "taxonomically_ambiguous"
-    else:
-        confidence = "low"
-        state = "fail_no_target"
-
-    return {
-        "runner_up_taxid": normalize_taxid(runner["taxid"]) if runner else "",
-        "runner_up_name": runner["name"] if runner else "NA",
-        "runner_up_pct": runner_pct,
-        "delta_pct": delta_pct,
-        "platform_agreement_score": agreement_score,
-        "platform_agreement_reason": agreement_reason,
-        "decision_confidence": confidence,
-        "awareness_state": state
-    }
-
-def top_two_meaningful_candidates(report_path):
-    rows = [r for r in parse_kraken_report_rows(report_path) if is_meaningful_kraken_candidate(r)]
-    rows = sorted(rows, key=lambda x: x["pct"], reverse=True)
-    top1 = rows[0] if len(rows) >= 1 else None
-    top2 = rows[1] if len(rows) >= 2 else None
-    return top1, top2
-
-def compute_platform_agreement(illumina_report, ont_report):
     i = infer_target_from_kraken_report(illumina_report)
     o = infer_target_from_kraken_report(ont_report)
 
@@ -1111,10 +1004,10 @@ def compute_taxonomic_confidence(illumina_report, ont_report, selected_taxid):
 
     agreement_score, agreement_reason = compute_platform_agreement(illumina_report, ont_report)
 
-    if selected_pct >= 95.0 and delta_pct >= 20.0 and agreement_score >= 0.5:
+    if selected_pct >= KRAKEN_AWARE_HIGH_TARGET_MIN_PCT and delta_pct >= KRAKEN_AWARE_DELTA_MIN_PCT and agreement_score >= 0.5:
         confidence = "high"
         state = "clean_stable"
-    elif selected_pct >= 80.0 and delta_pct >= 10.0:
+    elif selected_pct >= KRAKEN_AWARE_MODERATE_TARGET_MIN_PCT and delta_pct >= KRAKEN_AWARE_MODERATE_DELTA_MIN_PCT:
         confidence = "moderate"
         state = "clean_filterable"
     elif selected_pct > 0:
@@ -1157,45 +1050,89 @@ def normalize_tool_version_string(s):
 # SECTION 9 — FINAL TARGETS
 ###############################################################################
 
+
+def planned_stages(i):
+    return polish_plan(RUN_MODE.get(i, "setup_only"), POLISH_MODE, RACON_ROUNDS, RUN_POLYPOLISH)
+
+def needs_polypolish(i):
+    return "polypolish" in planned_stages(i)
+
+def stage_path(i, stage):
+    if stage == "unicycler": return stage_unicycler(i)
+    if stage == "medaka": return stage_medaka(i)
+    if stage == "polypolish": return stage_polypolish(i)
+    if re.fullmatch(r"racon[0-9]+", stage): return stage_racon(i, int(stage[5:]))
+    raise ValueError(f"Unknown assembly stage: {stage}")
+
+def polishing_source(i):
+    stages = [x for x in planned_stages(i) if x != "polypolish"]
+    return stage_path(i, stages[-1] if stages else "unicycler")
+
+def polish_status(i): return os.path.join(metadata_dir(i), "polypolish_status.json")
+def polish_execution(i): return os.path.join(metadata_dir(i), "polish_execution.json")
+def polishing_sam(i, mate): return os.path.join(work_mapping_dir(i), f"polypolish_R{mate}.sam")
+def alignment_count(i): return os.path.join(metadata_dir(i), "illumina_alignment_count.txt")
+
+def enabled_envs():
+    names = ["assembly", "qc"]
+    if (SETUP_ONLY and POLISH_MODE == "tripolish" and RUN_POLYPOLISH) or any(needs_polypolish(i) for i in SAMPLES): names.append("polishing")
+    if (SETUP_ONLY and POLISH_MODE in {"medaka", "tripolish"}) or any("medaka" in planned_stages(i) for i in SAMPLES): names.append("medaka")
+    if RUN_PROKKA: names.append("annotation")
+    return names
+
+def environment_outputs():
+    return [fn(name) for name in enabled_envs() for fn in
+            (env_conda_list_global, env_export_global, env_explicit_global,
+             env_pip_freeze_global, env_python_version_global)]
+
+def active_env_list(name):
+    return env_conda_list_global(name) if name in enabled_envs() else []
+
+def rule_memory(name, fallback):
+    value = int(config.get(name + "_mem_mb", fallback))
+    if value < 1: raise ValueError(f"{name}_mem_mb must be positive")
+    return value
+
+ASSEMBLY_MEM_MB = rule_memory("assembly", 8192)
+SPADES_MEMORY_GB = int(config.get("spades_memory_gb", max(1, ASSEMBLY_MEM_MB // 1024)))
+if SPADES_MEMORY_GB < 1 or SPADES_MEMORY_GB * 1024 > ASSEMBLY_MEM_MB:
+    raise ValueError("spades_memory_gb must be positive and fit within assembly_mem_mb")
+MIN_FASTA_LENGTH = int(config.get("min_fasta_length", 1000))
+if MIN_FASTA_LENGTH < 1: raise ValueError("min_fasta_length must be positive")
+KRAKEN_MEM_MB = rule_memory("kraken", max(1024, int(sum(
+    os.path.getsize(os.path.join(KRAKEN_DB_DIR, f)) for f in ("hash.k2d", "opts.k2d", "taxo.k2d")
+    if os.path.isfile(os.path.join(KRAKEN_DB_DIR, f))) / 1048576 * 1.2) + 1024))
+POLISH_MEM_MB = rule_memory("polishing", 4096)
+DB_CORE = [os.path.join(KRAKEN_DB_DIR, f) for f in ("hash.k2d", "opts.k2d", "taxo.k2d")]
+CONFIG_FILES = [os.path.abspath(x) for x in list(workflow.configfiles) if os.path.isfile(x)]
+SAMPLE_FILES = [SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) else []
+SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow_support.py")
+SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE]
+EFFECTIVE_CONFIG = json.dumps(config, sort_keys=True, default=str)
+AWARE_SETTINGS = {k: v for k, v in globals().copy().items() if k.startswith("KRAKEN_") and isinstance(v, (str, bool, int, float))}
+# Explicitly fingerprint only controller source so report-only edits do not rerun classification.
+_controller_source = Path(SOURCE_FILES[0]).read_text()
+_controller_functions = ["safe_float", "combine_platform_values", "choose_platform_cleaning_decision"]
+_controller_blocks = [re.search(r"(?ms)^def " + name + r"\(.*?(?=^def |^rule |\Z)", _controller_source).group(0)
+                      for name in _controller_functions]
+_controller_blocks.append(_controller_source[
+    _controller_source.index("def parse_kraken_report_rows("):
+    _controller_source.index("def normalize_tool_version_string(")])
+_controller_blocks.append(Path(SUPPORT_FILE).read_text().split("def manual_taxid", 1)[0])
+AWARE_CODE_HASH = hashlib.sha256("\n".join(_controller_blocks).encode()).hexdigest()
+
 rule all:
     input:
+        lambda wc: environment_outputs(),
         provenance_condarc_file(),
         provenance_system_info(),
         provenance_workflow_info(),
         provenance_db_hashes(),
         provenance_input_hashes(),
 
-        env_conda_list_global("assembly"),
-        env_export_global("assembly"),
-        env_explicit_global("assembly"),
-        env_pip_freeze_global("assembly"),
-        env_python_version_global("assembly"),
-
-        env_conda_list_global("qc"),
-        env_export_global("qc"),
-        env_explicit_global("qc"),
-        env_pip_freeze_global("qc"),
-        env_python_version_global("qc"),
-
-        env_conda_list_global("polishing"),
-        env_export_global("polishing"),
-        env_explicit_global("polishing"),
-        env_pip_freeze_global("polishing"),
-        env_python_version_global("polishing"),
-
-        env_conda_list_global("medaka"),
-        env_export_global("medaka"),
-        env_explicit_global("medaka"),
-        env_pip_freeze_global("medaka"),
-        env_python_version_global("medaka"),
-
-        env_conda_list_global("annotation"),
-        env_export_global("annotation"),
-        env_explicit_global("annotation"),
-        env_pip_freeze_global("annotation"),
-        env_python_version_global("annotation"),
 
         expand(final_asm("{isolate}"), isolate=SAMPLES),
+        expand(polish_execution("{isolate}"), isolate=SAMPLES),
         expand(run_mode_file("{isolate}"), isolate=SAMPLES),
         expand(run_summary_tsv("{isolate}"), isolate=SAMPLES),
         expand(run_summary_json("{isolate}"), isolate=SAMPLES),
@@ -1248,6 +1185,9 @@ def illumina_r2_files(i):
     pats = ["*_R2*.fastq.gz", "*_R2*.fq.gz", "*_R2*.fastq", "*_R2*.fq"]
     return sorted(sum((glob.glob(os.path.join(d, p)) for p in pats), []))
 
+def paired_illumina_files(i):
+    return pair_illumina_files(illumina_r1_files(i), illumina_r2_files(i))
+
 def nanopore_files(i):
     d = raw_nanopore_dir(i)
     pats = ["*.fastq.gz", "*.fq.gz", "*.fastq", "*.fq"]
@@ -1267,6 +1207,8 @@ if not SETUP_ONLY and not ADMIN_MODE:
     for iso in SAMPLES:
         r1 = illumina_r1_files(iso)
         r2 = illumina_r2_files(iso)
+        r1, r2 = pair_illumina_files(r1, r2)
+        validate_input_files(r1 + r2 + nanopore_files(iso))
         ont = nanopore_files(iso)
         has_illumina = len(r1) > 0 and len(r2) > 0
         has_ont = len(ont) > 0
@@ -1294,7 +1236,7 @@ if not SETUP_ONLY and not ADMIN_MODE:
         if RUN_BUSCO and not busco_db_ready(lineage):
             raise ValueError(
                 f"{iso}: BUSCO lineage database '{lineage}' missing at {busco_lineage_dir(lineage)}. "
-                f"Run: snakemake download_busco_db --config admin_mode=true"
+                f"Run: snakemake -s Hybas.smk download_busco_db --use-conda --config admin_mode=true"
             )
 
         RUN_MODE[iso] = mode
@@ -1304,10 +1246,23 @@ if not SETUP_ONLY and not ADMIN_MODE:
             "medaka_model": medaka_model,
         }
 
+    budget = workflow.global_resources.get("mem_mb")
+    reservations = {"assembly": ASSEMBLY_MEM_MB}
+    if KRAKEN_PROFILE_ENABLED: reservations["kraken"] = KRAKEN_MEM_MB
+    if any(planned_stages(i) for i in SAMPLES): reservations["polishing"] = POLISH_MEM_MB
+    if budget is not None:
+        for stage, needed in reservations.items():
+            if needed > int(budget):
+                raise ValueError(f"{stage} requires a {needed} MB reservation but the scheduling budget is {budget} MB. "
+                    "Set profiles/default/config.yaml resources.mem_mb to a budget the host can supply, "
+                    "or reduce the stage's requirement. Snakemake must not silently cap this reservation.")
+    if not os.access(BASE_DIR, os.W_OK):
+        raise ValueError(f"base_dir is not writable: {BASE_DIR}")
+
     if KRAKEN_PROFILE_ENABLED and not kraken_db_ready():
         raise ValueError(
             f"Kraken database missing or incomplete at {KRAKEN_DB_DIR}. "
-            f"Run: snakemake download_kraken_db --config admin_mode=true"
+            f"Run: snakemake -s Hybas.smk download_kraken_db --use-conda --config admin_mode=true"
         )
 
 else:
@@ -1323,10 +1278,8 @@ else:
 # SECTION 7 — STEP LABELING
 ###############################################################################
 
-TOTAL_STEPS = 39
 def logmsg(step, text):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return f"---\n[{now}] --- Step {step} of {TOTAL_STEPS}: {text} ---\n"
+    return text
 
 ###############################################################################
 # GLOBAL PROVENANCE RULES
@@ -1335,6 +1288,10 @@ def logmsg(step, text):
 ###############################################################################
 
 rule save_condarc:
+    input:
+        [PROJECT_CONDARC] if os.path.isfile(PROJECT_CONDARC) else []
+    params:
+        source=PROJECT_CONDARC
     output:
         provenance_condarc_file()
     message:
@@ -1350,40 +1307,12 @@ rule save_condarc:
 
 rule setup_envs:
     input:
+        lambda wc: environment_outputs(),
         provenance_condarc_file(),
         provenance_system_info(),
         provenance_workflow_info(),
         provenance_input_hashes(),
 
-        env_conda_list_global("assembly"),
-        env_export_global("assembly"),
-        env_explicit_global("assembly"),
-        env_pip_freeze_global("assembly"),
-        env_python_version_global("assembly"),
-
-        env_conda_list_global("qc"),
-        env_export_global("qc"),
-        env_explicit_global("qc"),
-        env_pip_freeze_global("qc"),
-        env_python_version_global("qc"),
-
-        env_conda_list_global("polishing"),
-        env_export_global("polishing"),
-        env_explicit_global("polishing"),
-        env_pip_freeze_global("polishing"),
-        env_python_version_global("polishing"),
-
-        env_conda_list_global("medaka"),
-        env_export_global("medaka"),
-        env_explicit_global("medaka"),
-        env_pip_freeze_global("medaka"),
-        env_python_version_global("medaka"),
-
-        env_conda_list_global("annotation"),
-        env_export_global("annotation"),
-        env_explicit_global("annotation"),
-        env_pip_freeze_global("annotation"),
-        env_python_version_global("annotation")
 
 rule global_system_info:
     output:
@@ -1422,8 +1351,10 @@ rule global_system_info:
                 out.write(f"{k}\t{str(v).replace(chr(10), ' | ')}\n")
 
 rule global_workflow_provenance:
+    params:
+        effective_config=EFFECTIVE_CONFIG, version=VERSION
     input:
-        save_condarc=provenance_condarc_file()
+        save_condarc=provenance_condarc_file(), config_files=CONFIG_FILES, samples=SAMPLE_FILES, source=SOURCE_FILES
     output:
         provenance_workflow_info()
     message:
@@ -1433,7 +1364,7 @@ rule global_workflow_provenance:
 
         # Resolve correct config file (works for CI and normal runs)
         try:
-            cfg_path = workflow.overwrite_configfiles[0]
+            cfg_path = CONFIG_FILES[-1] if CONFIG_FILES else "config.yaml"
         except (AttributeError, IndexError):
             cfg_path = "config.yaml"
 
@@ -1444,6 +1375,8 @@ rule global_workflow_provenance:
         with open(output[0], "w", encoding="utf-8") as out:
             out.write("field\tvalue\n")
             out.write(f"workflow_version\t{WORKFLOW_VERSION}\n")
+            out.write(f"source_sha256\t{sha256_file(SOURCE_FILES[0])}\n")
+            out.write(f"effective_config_json\t{EFFECTIVE_CONFIG}\n")
             out.write(f"base_dir\t{BASE_DIR}\n")
             out.write(f"sample_sheet\t{SAMPLE_SHEET}\n")
             out.write(f"threads_default\t{THREADS}\n")
@@ -1460,6 +1393,7 @@ rule global_workflow_provenance:
             out.write(f"kraken_db_dir\t{KRAKEN_DB_DIR}\n")
             out.write(f"busco_db_dir\t{BUSCO_DB_DIR}\n")
             out.write(f"config_path\t{cfg_path}\n")
+            out.write(f"config_version_label\t{CONFIG_VERSION_LABEL}\n")
             out.write(f"config_sha256\t{cfg_checksum}\n")
             out.write(f"sample_sheet_sha256\t{sample_checksum}\n")
             out.write(f"condarc_sha256\t{condarc_checksum}\n")
@@ -1580,6 +1514,11 @@ rule capture_env_annotation_global:
         """
 
 rule database_hashes:
+    input:
+        kraken=lambda wc: DB_CORE if KRAKEN_PROFILE_ENABLED else [],
+        busco=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[i]["busco_lineage"]), "dataset.cfg") for i in SAMPLES] if RUN_BUSCO and not (SETUP_ONLY or ADMIN_MODE) else []
+    params:
+        kraken_dir=KRAKEN_DB_DIR, busco_dir=BUSCO_DB_DIR, enabled=KRAKEN_PROFILE_ENABLED
     output:
         provenance_db_hashes()
     message:
@@ -1612,6 +1551,10 @@ rule database_hashes:
                 out.write(f"{dbtype}\t{path}\t{digest}\n")
 
 rule global_input_hashes:
+    input:
+        config_files=CONFIG_FILES, samples=SAMPLE_FILES, source=SOURCE_FILES
+    params:
+        effective_config=EFFECTIVE_CONFIG
     output:
         provenance_input_hashes()
     message:
@@ -1620,8 +1563,10 @@ rule global_input_hashes:
         os.makedirs(provenance_runtime_dir(), exist_ok=True)
 
         rows = []
-        if os.path.exists("config.yaml"):
-            rows.append(("config.yaml", os.path.abspath("config.yaml"), sha256_file("config.yaml")))
+        for path in CONFIG_FILES:
+            rows.append(("config_file", path, sha256_file(path)))
+        for path in SOURCE_FILES:
+            rows.append(("workflow_source", path, sha256_file(path)))
         if SAMPLE_SHEET and os.path.exists(SAMPLE_SHEET):
             rows.append(("sample_sheet", os.path.abspath(SAMPLE_SHEET), sha256_file(SAMPLE_SHEET)))
         if os.path.exists(PROJECT_CONDARC):
@@ -1640,14 +1585,19 @@ rule download_kraken_db:
     output:
         touch(os.path.join(KRAKEN_DB_DIR, ".complete"))
     params:
+        ready=kraken_db_ready(), db_identity=[file_identity(x) for x in DB_CORE],
         dbdir=KRAKEN_DB_DIR,
         hashf=os.path.join(KRAKEN_DB_DIR, "hash.k2d"),
         optsf=os.path.join(KRAKEN_DB_DIR, "opts.k2d"),
         taxof=os.path.join(KRAKEN_DB_DIR, "taxo.k2d")
     conda: "envs/qc.yml"
+    log: os.path.join(BASE_DIR, "provenance", "databases", "kraken_build.log")
+    resources: mem_mb=KRAKEN_MEM_MB, kraken_jobs=1
     threads: THREADS
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
+        exec > "{log}" 2>&1
         set -euo pipefail
         mkdir -p "{params.dbdir}"
         if [ -s "{params.hashf}" ] && [ -s "{params.optsf}" ] && [ -s "{params.taxof}" ]; then
@@ -1655,27 +1605,42 @@ rule download_kraken_db:
         else
           kraken2-build --standard --db "{params.dbdir}" --threads {threads}
         fi
+        test -s "{params.hashf}" && test -s "{params.optsf}" && test -s "{params.taxof}"
         touch "{output}"
         """
 
 rule download_busco_lineage:
+    input:
+        checker=os.path.join(SOURCE_ROOT, "scripts", "check_database.py"), support=SUPPORT_FILE
     output:
         touch(os.path.join(BUSCO_DB_DIR, "{lineage}", ".complete"))
     params:
         dbdir=BUSCO_DB_DIR,
-        lineage_dir=lambda wc: os.path.join(BUSCO_DB_DIR, wc.lineage)
+        lineage_dir=lambda wc: os.path.join(BUSCO_DB_DIR, wc.lineage),
+        checker=os.path.join(SOURCE_ROOT, "scripts", "check_database.py"),
+        readiness=lambda wc: valid_busco_db(os.path.join(BUSCO_DB_DIR, wc.lineage)),
+        dataset=lambda wc: file_identity(os.path.join(BUSCO_DB_DIR, wc.lineage, "dataset.cfg"))
     conda: "envs/qc.yml"
+    log: os.path.join(BASE_DIR, "provenance", "databases", "busco_{lineage}.log")
     threads: 1
+    message: "Prepare and verify BUSCO lineage {wildcards.lineage}"
     shell:
         r"""
-        set -euo pipefail
-        mkdir -p "{params.dbdir}"
-        if [ -d "{params.lineage_dir}" ]; then
-          echo "BUSCO lineage {wildcards.lineage} already present; skipping."
-        else
-          busco --download "{wildcards.lineage}" --download_path "{params.dbdir}"
-        fi
-        touch "{output}"
+        mkdir -p "{params.dbdir}" "$(dirname "{log}")"
+        (
+          if python "{params.checker}" "{params.lineage_dir}"; then
+            echo "Verified BUSCO dataset already present"
+          else
+            tempdir=$(mktemp -d "{params.dbdir}/.download.{wildcards.lineage}.XXXXXX")
+            busco --download "{wildcards.lineage}" --download_path "$tempdir"
+            python "{params.checker}" "$tempdir/{wildcards.lineage}"
+            if [ -e "{params.lineage_dir}" ]; then
+              mv "{params.lineage_dir}" "$tempdir/previous-incomplete"
+            fi
+            mv "$tempdir/{wildcards.lineage}" "{params.lineage_dir}"
+          fi
+          touch "{output}"
+        ) > "{log}" 2>&1
         """
 
 rule download_busco_db:
@@ -1686,7 +1651,6 @@ rule update_databases:
     input:
         os.path.join(KRAKEN_DB_DIR, ".complete"),
         expand(os.path.join(BUSCO_DB_DIR, "{lineage}", ".complete"), lineage=BUSCO_DOWNLOAD_LINEAGES)
-
 
 
 ###############################################################################
@@ -1713,6 +1677,10 @@ rule system_info:
             out.write(f"python_runtime\t{platform.python_version()}\n")
 
 rule workflow_provenance:
+    input:
+        global_info=provenance_workflow_info(), config_files=CONFIG_FILES, samples=SAMPLE_FILES
+    params:
+        effective_config=EFFECTIVE_CONFIG
     output:
         report(
             workflow_provenance_tsv("{isolate}"),
@@ -1722,12 +1690,14 @@ rule workflow_provenance:
         )
     run:
         os.makedirs(metadata_dir(wildcards.isolate), exist_ok=True)
-        cfg_checksum = sha256_file("config.yaml") if os.path.exists("config.yaml") else "NA"
+        cfg_checksum = sha256_file(CONFIG_FILES[-1]) if CONFIG_FILES else "NA"
         sample_checksum = sha256_file(SAMPLE_SHEET) if SAMPLE_SHEET and os.path.exists(SAMPLE_SHEET) else "NA"
 
         with open(output[0], "w", encoding="utf-8") as out:
             out.write("field\tvalue\n")
             out.write(f"workflow_version\t{WORKFLOW_VERSION}\n")
+            out.write(f"source_sha256\t{sha256_file(SOURCE_FILES[0])}\n")
+            out.write(f"effective_config_json\t{EFFECTIVE_CONFIG}\n")
             out.write(f"threads_default\t{THREADS}\n")
             out.write(f"keep_percent\t{KEEP_PERCENT}\n")
             out.write(f"racon_rounds\t{RACON_ROUNDS}\n")
@@ -1749,8 +1719,8 @@ rule workflow_provenance:
 
 rule merge_illumina:
     input:
-        r1=lambda wc: illumina_r1_files(wc.isolate),
-        r2=lambda wc: illumina_r2_files(wc.isolate)
+        r1=lambda wc: paired_illumina_files(wc.isolate)[0],
+        r2=lambda wc: paired_illumina_files(wc.isolate)[1]
     output:
         r1=merged_r1("{isolate}"),
         r2=merged_r2("{isolate}")
@@ -1770,6 +1740,7 @@ rule merge_illumina:
         logmsg(1, "Merging Illumina lanes")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -1783,10 +1754,10 @@ rule merge_illumina:
         > "$tmp1"; > "$tmp2"
         for f in {params.r1_list}; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac >> "$tmp1"; done
         for f in {params.r2_list}; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac >> "$tmp2"; done
-        pigz -n -c "$tmp1" > "{output.r1}"
-        pigz -n -c "$tmp2" > "{output.r2}"
+        pigz -p {threads} -n -c "$tmp1" > "{output.r1}"
+        pigz -p {threads} -n -c "$tmp2" > "{output.r2}"
         rm -f "$tmp1" "$tmp2"
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule merge_ont:
@@ -1809,6 +1780,7 @@ rule merge_ont:
         logmsg(2, "Merging ONT FASTQ")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -1819,9 +1791,9 @@ rule merge_ont:
         tmp="{params.outdir}/.ont.tmp.fastq"
         > "$tmp"
         for f in {params.ont_list}; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac >> "$tmp"; done
-        pigz -n -c "$tmp" > "{output}"
+        pigz -p {threads} -n -c "$tmp" > "{output}"
         rm -f "$tmp"
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 ###############################################################################
@@ -1846,12 +1818,13 @@ rule fastqc_pre:
         logmsg(3, "FastQC raw merged Illumina")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
         if [ -s "{input.r1}" ]; then fastqc -t {threads} -o "{params.outdir}" "{input.r1}"; fi
         if [ -s "{input.r2}" ]; then fastqc -t {threads} -o "{params.outdir}" "{input.r2}"; fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule nanoplot_raw:
@@ -1871,6 +1844,7 @@ rule nanoplot_raw:
         logmsg(4, "NanoPlot raw ONT")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -1884,7 +1858,7 @@ rule nanoplot_raw:
         else
           echo "No ONT input" > "{params.outdir}/README.txt"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule kraken2_illumina:
@@ -1905,6 +1879,8 @@ rule kraken2_illumina:
             subcategory="Kraken2",
         )
     params:
+        enabled=KRAKEN_PROFILE_ENABLED, database=KRAKEN_DB_DIR,
+        db_identity=lambda wc: [file_identity(x) for x in DB_CORE] if KRAKEN_PROFILE_ENABLED else [],
         outdir=lambda wc: kraken_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
     log:
@@ -1913,11 +1889,14 @@ rule kraken2_illumina:
         bench("{isolate}", "kraken2_illumina")
     conda:
         "envs/qc.yml"
+    resources:
+        mem_mb=KRAKEN_MEM_MB, kraken_jobs=1
     threads: THREADS
     message:
         logmsg(5, "Kraken2 raw Illumina")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -1935,7 +1914,7 @@ rule kraken2_illumina:
           : > "{output.kraken}"
           : > "{output.report_txt}"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule kraken2_nanopore:
@@ -1955,6 +1934,8 @@ rule kraken2_nanopore:
             subcategory="Kraken2",
         )
     params:
+        enabled=KRAKEN_PROFILE_ENABLED, database=KRAKEN_DB_DIR,
+        db_identity=lambda wc: [file_identity(x) for x in DB_CORE] if KRAKEN_PROFILE_ENABLED else [],
         outdir=lambda wc: kraken_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
     log:
@@ -1963,11 +1944,14 @@ rule kraken2_nanopore:
         bench("{isolate}", "kraken2_nanopore")
     conda:
         "envs/qc.yml"
+    resources:
+        mem_mb=KRAKEN_MEM_MB, kraken_jobs=1
     threads: THREADS
     message:
         logmsg(6, "Kraken2 raw ONT")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -1983,10 +1967,14 @@ rule kraken2_nanopore:
           : > "{output.kraken}"
           : > "{output.report_txt}"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule kraken_decision:
+    params:
+        settings=AWARE_SETTINGS,
+        controller=AWARE_CODE_HASH,
+        target=lambda wc: ISO_OVERRIDES[wc.isolate]["target_taxid"]
     input:
         illumina_report=os.path.join(kraken_dir("{isolate}"), "illumina.report.txt"),
         ont_report=os.path.join(kraken_dir("{isolate}"), "nanopore.report.txt")
@@ -2094,6 +2082,7 @@ rule clean_illumina:
         r1=clean_r1("{isolate}"),
         r2=clean_r2("{isolate}")
     params:
+        include_children=KRAKEN_INCLUDE_CHILDREN,
         outdir=lambda wc: work_inputs_cleaned_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
     log:
@@ -2107,6 +2096,7 @@ rule clean_illumina:
         logmsg(7, "Illumina cleaning / passthrough")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -2139,13 +2129,13 @@ rule clean_illumina:
           --taxid "$selected_taxid" $extra_children \
           -o "$tmp1" -o2 "$tmp2" --fastq-output
 
-        pigz -n -f "$tmp1"
-        pigz -n -f "$tmp2"
+        pigz -p {threads} -n -f "$tmp1"
+        pigz -p {threads} -n -f "$tmp2"
         mv "$tmp1.gz" "{output.r1}"
         mv "$tmp2.gz" "{output.r2}"
         gzip -t "{output.r1}"
         gzip -t "{output.r2}"
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule clean_ont:
@@ -2157,6 +2147,7 @@ rule clean_ont:
     output:
         cleaned=clean_ont_path("{isolate}")
     params:
+        include_children=KRAKEN_INCLUDE_CHILDREN,
         outdir=lambda wc: work_inputs_cleaned_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
     log:
@@ -2170,6 +2161,7 @@ rule clean_ont:
         logmsg(8, "ONT cleaning / passthrough")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -2198,10 +2190,10 @@ rule clean_ont:
           -s "{input.ont}" --taxid "$selected_taxid" $extra_children \
           -o "$tmp" --fastq-output
 
-        pigz -n -f "$tmp"
+        pigz -p {threads} -n -f "$tmp"
         mv "$tmp.gz" "{output.cleaned}"
         gzip -t "{output.cleaned}"
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 ###############################################################################
@@ -2242,6 +2234,7 @@ rule fastp_trim:
         logmsg(9, "fastp trimming")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.trimdir}" "{params.fastpdir}" "{params.logdir}"
@@ -2254,7 +2247,7 @@ rule fastp_trim:
           : > "{output.html}"
           : > "{output.json}"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule filtlong_ont:
@@ -2263,6 +2256,7 @@ rule filtlong_ont:
     output:
         filt_ont("{isolate}")
     params:
+        keep_percent=KEEP_PERCENT,
         outdir=lambda wc: work_inputs_filtered_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
     log:
@@ -2276,15 +2270,18 @@ rule filtlong_ont:
         logmsg(10, "Filtlong ONT")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
         if [ -s "{input}" ]; then
-          filtlong --min_length 1000 --keep_percent {KEEP_PERCENT} "{input}" | pigz -n > "{output}"
+          filtlong --min_length 1000 --keep_percent {KEEP_PERCENT} "{input}" > "{output}.tmp.fastq"
+          pigz -p {threads} -n -c "{output}.tmp.fastq" > "{output}"
+          rm -f "{output}.tmp.fastq"
         else
           : > "{output}"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule nanoplot_filt:
@@ -2304,6 +2301,7 @@ rule nanoplot_filt:
         logmsg(11, "NanoPlot filtered ONT")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -2317,7 +2315,7 @@ rule nanoplot_filt:
         else
           echo "No ONT input" > "{params.outdir}/README.txt"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 ###############################################################################
@@ -2325,6 +2323,11 @@ rule nanoplot_filt:
 ###############################################################################
 
 rule run_mode:
+    params:
+        mode=lambda wc: RUN_MODE[wc.isolate],
+        polish=POLISH_MODE,
+        ci=CI_MODE,
+        kraken=KRAKEN_DECISION_MODE
     output:
         run_mode_file("{isolate}")
     run:
@@ -2339,7 +2342,7 @@ rule run_mode:
 
 rule skip_reasons:
     input:
-        kd=kraken_decision_tsv("{isolate}")
+        kd=kraken_decision_tsv("{isolate}"), execution=polish_execution("{isolate}")
     output:
         report(
             skip_reasons_tsv("{isolate}"),
@@ -2351,6 +2354,8 @@ rule skip_reasons:
         iso = wildcards.isolate
         mode = RUN_MODE[iso]
         rows = []
+        execution = json.loads(Path(input.execution).read_text())
+        rows.extend((stage, reason) for stage, reason in execution["skipped_stages"].items())
 
         if mode == "setup_only":
             rows.append(("workflow", "setup_only_mode"))
@@ -2431,10 +2436,10 @@ rule unicycler:
         r2=trim_r2("{isolate}"),
         mode=run_mode_file("{isolate}")
     output:
-        dir=directory(unicycler_outdir("{isolate}")),
         asm=unicycler_asm("{isolate}"),
         snapshot=stage_unicycler("{isolate}")
     params:
+        spades_memory_gb=SPADES_MEMORY_GB, min_fasta_length=MIN_FASTA_LENGTH,
         outdir=lambda wc: unicycler_outdir(wc.isolate),
         assemblydir=lambda wc: work_assembly_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate),
@@ -2445,26 +2450,30 @@ rule unicycler:
         bench("{isolate}", "unicycler")
     conda:
         "envs/assembly.yml"
+    resources:
+        mem_mb=ASSEMBLY_MEM_MB, disk_mb=rule_memory("assembly_disk", 20000)
     threads: THREADS
     message:
         logmsg(12, "Unicycler assembly")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.assemblydir}" "{params.logdir}"
+        trap 'rc=$?; if [ "$rc" -ne 0 ] && [ -d "{params.outdir}" ]; then find "{params.outdir}" -type f -name "*.log" -exec cp --parents {{}} "{params.logdir}/" \; ; fi; exit "$rc"' EXIT
         if [ "{params.mode}" = "hybrid" ]; then
-          unicycler -l "{input.ont}" -1 "{input.r1}" -2 "{input.r2}" -o "{output.dir}" -t {threads} --min_fasta_length 1000
+          unicycler -l "{input.ont}" -1 "{input.r1}" -2 "{input.r2}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --spades_options "-m {params.spades_memory_gb}"
         elif [ "{params.mode}" = "ont_only" ]; then
-          unicycler -l "{input.ont}" -o "{output.dir}" -t {threads} --min_fasta_length 1000
+          unicycler -l "{input.ont}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --spades_options "-m {params.spades_memory_gb}"
         elif [ "{params.mode}" = "illumina_only" ]; then
-          unicycler -1 "{input.r1}" -2 "{input.r2}" -o "{output.dir}" -t {threads} --min_fasta_length 1000
+          unicycler -1 "{input.r1}" -2 "{input.r2}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --spades_options "-m {params.spades_memory_gb}"
         else
           echo "Unknown run mode"
           exit 1
         fi
         cp "{output.asm}" "{output.snapshot}"
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 ###############################################################################
@@ -2492,6 +2501,7 @@ rule racon_map:
     output:
         paf=os.path.join(work_racon_dir("{isolate}"), "ont_vs_racon{i}.paf")
     params:
+        polish=POLISH_MODE, rounds=RACON_ROUNDS,
         outdir=lambda wc: work_racon_dir(wc.isolate),
         mode=lambda wc: RUN_MODE[wc.isolate]
     log:
@@ -2500,11 +2510,14 @@ rule racon_map:
         bench("{isolate}", "racon_map_{i}")
     conda:
         "envs/assembly.yml"
+    resources:
+        mem_mb=POLISH_MEM_MB
     threads: THREADS
     message:
         "Racon map round {wildcards.i}"
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
@@ -2513,7 +2526,7 @@ rule racon_map:
         else
           minimap2 -t {threads} -x map-ont "{input.asm}" "{input.ont}" > "{output.paf}"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule racon_consensus:
@@ -2524,6 +2537,7 @@ rule racon_consensus:
     output:
         fasta=os.path.join(work_racon_dir("{isolate}"), "stage_racon{i}.fasta")
     params:
+        polish=POLISH_MODE, rounds=RACON_ROUNDS,
         outdir=lambda wc: work_racon_dir(wc.isolate),
         mode=lambda wc: RUN_MODE[wc.isolate]
     log:
@@ -2532,20 +2546,24 @@ rule racon_consensus:
         bench("{isolate}", "racon_consensus_{i}")
     conda:
         "envs/assembly.yml"
+    resources:
+        mem_mb=POLISH_MEM_MB
     threads: THREADS
     message:
         "Racon consensus round {wildcards.i}"
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
-        if [ "{params.mode}" = "illumina_only" ] || [ "{POLISH_MODE}" = "none" ] || [ ! -s "{input.paf}" ]; then
+        if [ "{params.mode}" = "illumina_only" ] || [ "{POLISH_MODE}" = "none" ]; then
           cp "{input.asm}" "{output.fasta}"
         else
+          test -s "{input.paf}" || {{ echo "No alignments for requested Racon stage" >&2; exit 1; }}
           racon -t {threads} "{input.ont}" "{input.paf}" "{input.asm}" > "{output.fasta}"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule medaka:
@@ -2555,6 +2573,7 @@ rule medaka:
     output:
         stage_medaka("{isolate}")
     params:
+        polish=POLISH_MODE, rounds=RACON_ROUNDS,
         outdir=lambda wc: work_medaka_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate),
         mode=lambda wc: RUN_MODE[wc.isolate],
@@ -2565,11 +2584,14 @@ rule medaka:
         bench("{isolate}", "medaka")
     conda:
         "envs/medaka.yml"
+    resources:
+        mem_mb=POLISH_MEM_MB
     threads: THREADS
     message:
         logmsg(13, "Medaka polishing")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -2582,192 +2604,185 @@ rule medaka:
         else
           medaka_consensus -t {threads} -i "{input.ont}" -d "{input.prev}" -o "{params.outdir}"
         fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule bwa_index:
     input:
-        stage_medaka("{isolate}")
+        lambda wc: polishing_source(wc.isolate)
     output:
-        ref=bwa_ref("{isolate}"),
-        fai=bwa_fai("{isolate}"),
-        amb=bwa_idx("{isolate}", "amb"),
-        ann=bwa_idx("{isolate}", "ann"),
-        bwt=bwa_idx("{isolate}", "bwt"),
-        pac=bwa_idx("{isolate}", "pac"),
-        sa=bwa_idx("{isolate}", "sa")
+        ref=bwa_ref("{isolate}"), fai=bwa_fai("{isolate}"),
+        amb=bwa_idx("{isolate}", "amb"), ann=bwa_idx("{isolate}", "ann"),
+        bwt=bwa_idx("{isolate}", "bwt"), pac=bwa_idx("{isolate}", "pac"), sa=bwa_idx("{isolate}", "sa")
     params:
-        outdir=lambda wc: work_mapping_dir(wc.isolate),
-        mode=lambda wc: RUN_MODE[wc.isolate]
+        outdir=lambda wc: work_mapping_dir(wc.isolate)
     log:
         os.path.join(logs_dir("{isolate}"), "bwa_index.log")
-    benchmark:
-        bench("{isolate}", "bwa_index")
-    conda:
-        "envs/polishing.yml"
+    benchmark: bench("{isolate}", "bwa_index")
+    conda: "envs/polishing.yml"
+    resources: mem_mb=POLISH_MEM_MB
     threads: 1
-    message:
-        logmsg(14, "BWA index")
+    message: "Index assembly for short-read polishing: {wildcards.isolate}"
     shell:
         r"""
+        mkdir -p "{params.outdir}" "$(dirname "{log}")"
         (
-        set -euo pipefail
-        mkdir -p "{params.outdir}"
-        cp "{input}" "{output.ref}"
-        samtools faidx "{output.ref}"
-        if [ "{params.mode}" = "hybrid" ] && [ "{POLISH_MODE}" = "tripolish" ] && [ "{RUN_POLYPOLISH}" = "True" ]; then
+          cp "{input}" "{output.ref}"
+          samtools faidx "{output.ref}"
           bwa index "{output.ref}"
-        else
-          : > "{output.amb}"
-          : > "{output.ann}"
-          : > "{output.bwt}"
-          : > "{output.pac}"
-          : > "{output.sa}"
-        fi
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
+        """
+
+rule polypolish_align:
+    input:
+        ref=bwa_ref("{isolate}"), amb=bwa_idx("{isolate}", "amb"),
+        ann=bwa_idx("{isolate}", "ann"), bwt=bwa_idx("{isolate}", "bwt"),
+        pac=bwa_idx("{isolate}", "pac"), sa=bwa_idx("{isolate}", "sa"),
+        r1=trim_r1("{isolate}"), r2=trim_r2("{isolate}")
+    output:
+        r1=polishing_sam("{isolate}", 1), r2=polishing_sam("{isolate}", 2)
+    log: os.path.join(logs_dir("{isolate}"), "polypolish_align.log")
+    benchmark: bench("{isolate}", "polypolish_align")
+    conda: "envs/polishing.yml"
+    resources: mem_mb=POLISH_MEM_MB, disk_mb=rule_memory("mapping_disk", 12000)
+    threads: THREADS
+    message: "Prepare separate all-alignment SAMs: {wildcards.isolate}"
+    shell:
+        r"""
+        mkdir -p "$(dirname "{log}")"
+        (
+          bwa mem -t {threads} -a "{input.ref}" "{input.r1}" > "{output.r1}"
+          bwa mem -t {threads} -a "{input.ref}" "{input.r2}" > "{output.r2}"
+        ) > "{log}" 2>&1
         """
 
 rule illumina_map:
     input:
-        ref=bwa_ref("{isolate}"),
-        fai=bwa_fai("{isolate}"),
-        amb=bwa_idx("{isolate}", "amb"),
-        ann=bwa_idx("{isolate}", "ann"),
-        bwt=bwa_idx("{isolate}", "bwt"),
-        pac=bwa_idx("{isolate}", "pac"),
-        sa=bwa_idx("{isolate}", "sa"),
-        r1=trim_r1("{isolate}"),
-        r2=trim_r2("{isolate}")
+        ref=bwa_ref("{isolate}"), fai=bwa_fai("{isolate}"), amb=bwa_idx("{isolate}", "amb"),
+        ann=bwa_idx("{isolate}", "ann"), bwt=bwa_idx("{isolate}", "bwt"),
+        pac=bwa_idx("{isolate}", "pac"), sa=bwa_idx("{isolate}", "sa"),
+        r1=trim_r1("{isolate}"), r2=trim_r2("{isolate}")
     output:
-        bam=coord_bam("{isolate}"),
-        bai=coord_bai("{isolate}"),
-        qn=namesort_bam("{isolate}")
+        bam=coord_bam("{isolate}"), bai=coord_bai("{isolate}"), qn=namesort_bam("{isolate}"),
+        count_file=alignment_count("{isolate}")
     params:
         outdir=lambda wc: work_mapping_dir(wc.isolate),
-        mode=lambda wc: RUN_MODE[wc.isolate]
-    log:
-        os.path.join(logs_dir("{isolate}"), "illumina_map.log")
-    benchmark:
-        bench("{isolate}", "illumina_map")
-    conda:
-        "envs/polishing.yml"
+        sort_extra=lambda wc, threads: max(0, threads - 1),
+        sort_memory=lambda wc, threads: max(64, int(POLISH_MEM_MB * 0.7 / max(1, threads)))
+    log: os.path.join(logs_dir("{isolate}"), "illumina_map.log")
+    benchmark: bench("{isolate}", "illumina_map")
+    conda: "envs/polishing.yml"
+    resources: mem_mb=POLISH_MEM_MB, disk_mb=rule_memory("mapping_disk", 12000)
     threads: THREADS
-    message:
-        logmsg(15, "Illumina mapping for Polypolish")
+    message: "Create paired-end mapping QC: {wildcards.isolate}"
     shell:
         r"""
+        mkdir -p "{params.outdir}" "$(dirname "{log}")" "$(dirname "{output.count_file}")"
         (
-        set -euo pipefail
-        mkdir -p "{params.outdir}"
-        if [ "{params.mode}" = "hybrid" ] && [ "{POLISH_MODE}" = "tripolish" ] && [ "{RUN_POLYPOLISH}" = "True" ] && [ -s "{input.r1}" ] && [ -s "{input.r2}" ]; then
-          bwa mem -t {threads} -a -x intractg "{input.ref}" "{input.r1}" "{input.r2}" \
-            | samtools sort -@ {threads} -O BAM -o "{output.bam}"
+          tmp="{params.outdir}/.paired_qc.sam"
+          trap 'rm -f "$tmp"' EXIT
+          bwa mem -t {threads} -a -x intractg "{input.ref}" "{input.r1}" "{input.r2}" > "$tmp"
+          samtools sort -@ {params.sort_extra} -m {params.sort_memory}M -O BAM -o "{output.bam}" "$tmp"
           samtools index "{output.bam}"
-          samtools sort -n -@ {threads} -O BAM "{output.bam}" -o "{output.qn}"
-        else
-          samtools view -b -T "{input.ref}" -h -o "{output.bam}" /dev/null
-          samtools index "{output.bam}"
-          samtools view -b -T "{input.ref}" -h -o "{output.qn}" /dev/null
-        fi
-        ) 2>&1 | tee "{log}"
+          samtools sort -n -@ {params.sort_extra} -m {params.sort_memory}M -O BAM "{output.bam}" -o "{output.qn}"
+          samtools view -c "{output.qn}" > "{output.count_file}"
+        ) > "{log}" 2>&1
         """
 
 rule polypolish:
     input:
-        ref=bwa_ref("{isolate}"),
-        bam=namesort_bam("{isolate}")
+        ref=bwa_ref("{isolate}"), r1=polishing_sam("{isolate}", 1), r2=polishing_sam("{isolate}", 2)
     output:
-        stage_polypolish("{isolate}")
+        fasta=stage_polypolish("{isolate}"), status=polish_status("{isolate}")
     params:
-        outdir=lambda wc: work_polypolish_dir(wc.isolate),
-        mode=lambda wc: RUN_MODE[wc.isolate]
-    log:
-        os.path.join(logs_dir("{isolate}"), "polypolish.log")
-    benchmark:
-        bench("{isolate}", "polypolish")
-    conda:
-        "envs/polishing.yml"
+        outdir=lambda wc: work_polypolish_dir(wc.isolate)
+    log: os.path.join(logs_dir("{isolate}"), "polypolish.log")
+    benchmark: bench("{isolate}", "polypolish")
+    conda: "envs/polishing.yml"
+    resources: mem_mb=POLISH_MEM_MB
     threads: 1
-    message:
-        logmsg(16, "Polypolish")
+    message: "Polypolish: {wildcards.isolate}"
     shell:
         r"""
+        mkdir -p "{params.outdir}" "$(dirname "{log}")" "$(dirname "{output.status}")"
         (
-        set -euo pipefail
-        mkdir -p "{params.outdir}"
-        if [ "{params.mode}" != "hybrid" ] || [ "{POLISH_MODE}" != "tripolish" ] || [ "{RUN_POLYPOLISH}" != "True" ]; then
-          cp "{input.ref}" "{output}"
-          exit 0
-        fi
-
-        if ! samtools view -H "{input.bam}" | grep -q '^@HD.*SO:queryname'; then
-          samtools sort -n -@1 -O BAM "{input.bam}" -o "{input.bam}.tmp"
-          mv "{input.bam}.tmp" "{input.bam}"
-        fi
-
-        tmp_sam="{params.outdir}/.polypolish.sam"
-        tmp_out="{output}.tmp"
-        trap 'rm -f "$tmp_sam" "$tmp_out"' EXIT
-
-        samtools view -h "{input.bam}" \
-          | awk 'BEGIN{{FS=OFS="\t"}} /^@/ {{print; next}} $10 != "*" {{print}}' > "$tmp_sam"
-
-        read_count=$(awk 'BEGIN{{c=0}} !/^@/ {{c++}} END{{print c}}' "$tmp_sam")
-
-        if [ "$read_count" -gt 0 ]; then
-          polypolish polish "{input.ref}" "$tmp_sam" > "$tmp_out"
-          mv "$tmp_out" "{output}"
-        else
-          cp "{input.ref}" "{output}"
-        fi
-        ) 2>&1 | tee "{log}"
+          count1=$(samtools view -c -F 4 "{input.r1}")
+          count2=$(samtools view -c -F 4 "{input.r2}")
+          if [ "$((count1 + count2))" -eq 0 ]; then
+            cp "{input.ref}" "{output.fasta}"
+            printf '{{"status":"skipped","reason":"no_mapped_alignments","mapped_alignments":0}}\n' > "{output.status}"
+          else
+            tmp="{output.fasta}.tmp"
+            trap 'rm -f "$tmp"' EXIT
+            polypolish polish "{input.ref}" "{input.r1}" "{input.r2}" > "$tmp"
+            test -s "$tmp"
+            mv "$tmp" "{output.fasta}"
+            printf '{{"status":"completed","reason":"","mapped_alignments":%s}}\n' "$((count1 + count2))" > "{output.status}"
+          fi
+        ) > "{log}" 2>&1
         """
+
+rule polish_execution:
+    input:
+        assemblies=lambda wc: [stage_path(wc.isolate, x) for x in ["unicycler"] + planned_stages(wc.isolate)],
+        polypolish_status=lambda wc: [polish_status(wc.isolate)] if needs_polypolish(wc.isolate) else []
+    output: polish_execution("{isolate}")
+    params:
+        requested=POLISH_MODE, rounds=RACON_ROUNDS, polypolish=RUN_POLYPOLISH,
+        mode=lambda wc: RUN_MODE[wc.isolate],
+        source=lambda wc: final_source_for(wc.isolate),
+        helper_sha=sha256_file(SUPPORT_FILE)
+    message: "Record executed polishing stages: {wildcards.isolate}"
+    run:
+        iso = wildcards.isolate
+        planned = planned_stages(iso)
+        executed = list(planned)
+        skipped = {}
+        if "polypolish" not in planned:
+            skipped["polypolish"] = "disabled_or_incompatible_with_requested_mode"
+        for stage in ("racon", "medaka"):
+            if not any(x.startswith(stage) for x in planned):
+                skipped[stage] = "disabled_or_incompatible_with_requested_mode"
+        pp = {}
+        if input.polypolish_status:
+            pp = json.loads(Path(input.polypolish_status[0]).read_text())
+            if pp["status"] == "skipped":
+                executed.remove("polypolish")
+                skipped["polypolish"] = pp["reason"]
+        stages = [{"stage": name, "path": path, **require_fasta(path)}
+                  for name, path in zip(["unicycler"] + planned, input.assemblies)]
+        final_stage = executed[-1] if executed else "unicycler"
+        write_json(output[0], {"schema": "hybas-polishing-v1", "workflow_version": VERSION,
+            "requested_polish_mode": POLISH_MODE, "run_mode": RUN_MODE[iso],
+            "planned_stages": planned, "executed_stages": executed, "skipped_stages": skipped,
+            "final_source_stage": final_stage, "final_source_path": stage_path(iso, final_stage),
+            "promoted_artifact_path": params.source,
+            "final_source_sha256": sha256_file(params.source), "stages": stages,
+            "polypolish": pp})
 
 ###############################################################################
 # SECTION 18 — FINAL ASSEMBLY
 ###############################################################################
 
 def final_source_for(i):
-    mode = RUN_MODE[i]
-
-    if mode == "setup_only":
-        return unicycler_asm(i)
-
-    if POLISH_MODE == "none":
-        return unicycler_asm(i)
-    if POLISH_MODE == "racon":
-        return stage_racon(i, RACON_ROUNDS) if mode in {"hybrid", "ont_only"} and RACON_ROUNDS > 0 else unicycler_asm(i)
-    if POLISH_MODE == "medaka":
-        return stage_medaka(i) if mode in {"hybrid", "ont_only"} else unicycler_asm(i)
-    if POLISH_MODE == "tripolish":
-        if mode == "hybrid" and RUN_POLYPOLISH:
-            return stage_polypolish(i)
-        if mode == "ont_only":
-            return stage_medaka(i)
-        return unicycler_asm(i)
-    return unicycler_asm(i)
+    stages = planned_stages(i)
+    return stage_path(i, stages[-1] if stages else "unicycler")
 
 rule final_copy:
     input:
-        lambda wc: final_source_for(wc.isolate)
+        source=lambda wc: final_source_for(wc.isolate), execution=polish_execution("{isolate}")
     output:
-        report(
-            final_asm("{isolate}"),
-            caption="report/final_assembly.rst",
-            category="Assembly",
-            subcategory="Final",
-        )
+        report(final_asm("{isolate}"), caption="report/final_assembly.rst", category="Assembly", subcategory="Final")
     params:
         outdir=lambda wc: work_final_dir(wc.isolate)
-    log:
-        os.path.join(logs_dir("{isolate}"), "final_copy.log")
-    message:
-        logmsg(17, "Final assembly copy")
+    log: os.path.join(logs_dir("{isolate}"), "final_copy.log")
+    message: "Promote validated final assembly: {wildcards.isolate}"
     shell:
         r"""
-        set -euo pipefail
-        mkdir -p "{params.outdir}"
-        cp "{input}" "{output}"
+        mkdir -p "{params.outdir}" "$(dirname "{log}")"
+        cp "{input.source}" "{output}.tmp"
+        mv "{output}.tmp" "{output}"
+        printf '%s\n' "Final assembly copied from {input.source}" > "{log}"
         """
 
 ###############################################################################
@@ -2793,11 +2808,12 @@ rule quast:
         logmsg(18, "QUAST")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
         quast.py -o "{params.outdir}" -t {threads} "{input}"
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule busco:
@@ -2807,6 +2823,7 @@ rule busco:
         txt=report(busco_txt("{isolate}"), caption="report/busco_txt.rst", category="QC", subcategory="BUSCO"),
         html=report(busco_html("{isolate}"), caption="report/busco_html.rst", category="QC", subcategory="BUSCO")
     params:
+        enabled=RUN_BUSCO,
         outdir=lambda wc: busco_dir(wc.isolate),
         rundir=lambda wc: busco_run_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate),
@@ -2817,11 +2834,14 @@ rule busco:
         bench("{isolate}", "busco")
     conda:
         "envs/qc.yml"
+    resources:
+        mem_mb=rule_memory("busco", 4096)
     threads: THREADS
     message:
         logmsg(19, "BUSCO")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
@@ -2835,15 +2855,15 @@ rule busco:
           -o "busco_{wildcards.isolate}" \
           --out_path "{params.outdir}" \
           -m genome \
-          -l "{params.lineage}" \
+          -l "{BUSCO_DB_DIR}/{params.lineage}" --offline \
           --download_path "{BUSCO_DB_DIR}" \
           -c {threads} \
           --force
         sfile=$(ls -1 "{params.rundir}"/short_summary*.txt 2>/dev/null | head -n1 || true)
         hfile=$(ls -1 "{params.rundir}"/short_summary*.html 2>/dev/null | head -n1 || true)
-        if [ -n "$sfile" ]; then cp -f "$sfile" "{output.txt}"; else : > "{output.txt}"; fi
-        if [ -n "$hfile" ]; then cp -f "$hfile" "{output.html}"; else : > "{output.html}"; fi
-        ) 2>&1 | tee "{log}"
+        if [ -n "$sfile" ] && [ -s "$sfile" ]; then if [ "$sfile" != "{output.txt}" ]; then cp -f "$sfile" "{output.txt}"; fi; else echo "BUSCO completed without a nonempty short summary" >&2; exit 1; fi
+        if [ -n "$hfile" ] && [ -s "$hfile" ]; then if [ "$hfile" != "{output.html}" ]; then cp -f "$hfile" "{output.html}"; fi; else printf '<html><body>BUSCO does not provide an HTML summary in this version. See short_summary.txt.</body></html>\n' > "{output.html}"; fi
+        ) > "{log}" 2>&1
         """
 
 rule seqkit_stats:
@@ -2888,6 +2908,7 @@ rule seqkit_stats:
         logmsg(20, "seqkit summaries")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
@@ -2914,7 +2935,7 @@ rule seqkit_stats:
           seqkit stats -a -T "{input.asm}" | awk 'NR==2{{print "final_assembly\t"$1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7"\t"$8}}'
         }} > "{output.asm}"
 
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule coverage_estimate:
@@ -2940,23 +2961,26 @@ rule coverage_estimate:
         logmsg(21, "ONT coverage estimate")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
         if [ -s "{input.ont}" ]; then
-          ont_bp=$(seqkit stats -a -T "{input.ont}" | awk 'NR==2 {{gsub(/,/,"",$5); print $5}}' || echo 0)
+          ont_bp=$(seqkit stats -a -T "{input.ont}" | awk 'NR==2 {{gsub(/,/,"",$5); print $5}}')
         else
           ont_bp=0
         fi
-        asm_bp=$(seqkit stats -a -T "{input.asm}" | awk 'NR==2 {{gsub(/,/,"",$5); print $5}}' || echo 0)
+        asm_bp=$(seqkit stats -a -T "{input.asm}" | awk 'NR==2 {{gsub(/,/,"",$5); print $5}}')
         cov=$(awk -v a="$ont_bp" -v b="$asm_bp" 'BEGIN{{if(b>0) printf "%.2f", a/b; else print 0}}')
         printf "field\tvalue\nont_bp\t%s\nassembly_bp\t%s\nont_coverage_x\t%s\n" "$ont_bp" "$asm_bp" "$cov" > "{output.note}"
         : > "{output.flag}"
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 rule multiqc:
     input:
+        custom=multiqc_custom_tsv("{isolate}"),
+        config=os.path.join(SOURCE_ROOT, "multiqc_config.yaml"),
         quast_txt=quast_txt("{isolate}"),
         quast_tsv=quast_tsv("{isolate}"),
         busco=busco_txt("{isolate}"),
@@ -2980,6 +3004,7 @@ rule multiqc:
             subcategory="MultiQC",
         )
     params:
+        enabled=RUN_MULTIQC,
         outdir=lambda wc: multiqc_dir(wc.isolate),
         isodir=lambda wc: iso_dir(wc.isolate)
     log:
@@ -2993,6 +3018,7 @@ rule multiqc:
         logmsg(22, "MultiQC")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
@@ -3000,8 +3026,8 @@ rule multiqc:
           : > "{output}"
           exit 0
         fi
-        multiqc -f -n multiqc_report.html -o "{params.outdir}" "{params.isodir}"
-        ) 2>&1 | tee "{log}"
+        multiqc -f -c "{input.config}" -n multiqc_report.html -o "{params.outdir}" "{params.isodir}/reports" "{params.isodir}/metadata" --ignore "*/multiqc/*" --ignore "*/safety/*"
+        ) > "{log}" 2>&1
         """
 
 ###############################################################################
@@ -3015,18 +3041,22 @@ rule prokka:
         gff=report(prokka_gff("{isolate}"), caption="report/prokka_gff.rst", category="Annotation", subcategory="Prokka"),
         faa=report(prokka_faa("{isolate}"), caption="report/prokka_faa.rst", category="Annotation", subcategory="Prokka")
     params:
+        enabled=RUN_PROKKA,
         outdir=lambda wc: annotation_dir(wc.isolate)
     log:
         os.path.join(logs_dir("{isolate}"), "prokka.log")
     benchmark:
         bench("{isolate}", "prokka")
     conda:
-        "envs/annotation.yml"
+        "envs/annotation.yml" if RUN_PROKKA else "envs/controller.yml"
+    resources:
+        mem_mb=rule_memory("prokka", 4096)
     threads: THREADS
     message:
         logmsg(23, "Prokka")
     shell:
         r"""
+        mkdir -p "$(dirname "{log}")"
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
@@ -3036,7 +3066,7 @@ rule prokka:
           exit 0
         fi
         prokka "{input}" --outdir "{params.outdir}" --prefix "{wildcards.isolate}" --cpus {threads} --force
-        ) 2>&1 | tee "{log}"
+        ) > "{log}" 2>&1
         """
 
 ###############################################################################
@@ -3045,11 +3075,11 @@ rule prokka:
 
 rule tool_versions:
     input:
-        assembly_list=env_conda_list_global("assembly"),
-        qc_list=env_conda_list_global("qc"),
-        polishing_list=env_conda_list_global("polishing"),
-        medaka_list=env_conda_list_global("medaka"),
-        annotation_list=env_conda_list_global("annotation")
+        assembly_list=lambda wc: active_env_list("assembly"),
+        qc_list=lambda wc: active_env_list("qc"),
+        polishing_list=lambda wc: active_env_list("polishing"),
+        medaka_list=lambda wc: active_env_list("medaka"),
+        annotation_list=lambda wc: active_env_list("annotation")
     output:
         report(
             tool_versions_tsv("{isolate}"),
@@ -3064,6 +3094,9 @@ rule tool_versions:
         def parse_conda_list_version(path, names):
             if isinstance(names, str):
                 names = [names]
+            if isinstance(path, (list, tuple)):
+                if not path: return "NA"
+                path = path[0]
             if not os.path.exists(path):
                 return "NA"
 
@@ -3085,13 +3118,7 @@ rule tool_versions:
             return "NA"
 
         versions = {
-            "snakemake": first_version(
-                parse_conda_list_version(input.qc_list, "snakemake"),
-                parse_conda_list_version(input.assembly_list, "snakemake"),
-                parse_conda_list_version(input.polishing_list, "snakemake"),
-                parse_conda_list_version(input.medaka_list, "snakemake"),
-                parse_conda_list_version(input.annotation_list, "snakemake"),
-            ),
+            "snakemake": __import__("importlib.metadata", fromlist=["version"]).version("snakemake"),
 
             "unicycler": parse_conda_list_version(input.assembly_list, "unicycler"),
             "racon": parse_conda_list_version(input.assembly_list, "racon"),
@@ -3177,6 +3204,8 @@ rule checksums:
 ###############################################################################
 
 rule run_summary:
+    params:
+        version=VERSION, config=EFFECTIVE_CONFIG, helper_sha=sha256_file(SUPPORT_FILE)
     input:
         final=final_asm("{isolate}"),
         mode=run_mode_file("{isolate}"),
@@ -3187,7 +3216,9 @@ rule run_summary:
         busco=busco_txt("{isolate}"),
         cov=coverage_note("{isolate}"),
         skip=skip_reasons_tsv("{isolate}"),
-        bam=namesort_bam("{isolate}"),
+        bam=lambda wc: [namesort_bam(wc.isolate)] if needs_polypolish(wc.isolate) else [],
+        mapping_count=lambda wc: [alignment_count(wc.isolate)] if needs_polypolish(wc.isolate) else [],
+        execution=polish_execution("{isolate}"),
         kr_illumina=os.path.join(kraken_dir("{isolate}"), "illumina.report.txt"),
         kr_ont=os.path.join(kraken_dir("{isolate}"), "nanopore.report.txt"),
         kraken_decision=kraken_decision_tsv("{isolate}"),
@@ -3264,19 +3295,7 @@ rule run_summary:
             return str(c)
 
         def quast_metric(path, metric_name):
-            if not os.path.exists(path):
-                return "NA"
-            with open(path, "r", encoding="utf-8", errors="ignore") as fh:
-                lines = [x.rstrip("\n") for x in fh if x.strip()]
-            if len(lines) < 2:
-                return "NA"
-            header = lines[0].split("\t")
-            vals = lines[1].split("\t")
-            if metric_name in header:
-                idx = header.index(metric_name)
-                if idx < len(vals):
-                    return vals[idx]
-            return "NA"
+            return read_quast_metric(path, metric_name)
 
         def parse_busco(path):
             txt = read_text(path)
@@ -3304,7 +3323,7 @@ rule run_summary:
                 out["n_buscos"] = m.group("n")
             else:
                 for line in txt.splitlines():
-                    if line.startswith("C:"):
+                    if "C:" in line:
                         out["summary_line"] = line.strip()
                         break
             return out
@@ -3355,22 +3374,21 @@ rule run_summary:
         cov_stats = parse_cov(input.cov)
         kraken_decision_stats = parse_tsv_dict(input.kraken_decision)
 
-        polypolish_alignments = "NA"
-        if os.path.exists(input.bam):
-            try:
-                polypolish_alignments = subprocess.check_output(
-                    f"samtools view -c {shlex.quote(input.bam)}",
-                    shell=True,
-                    text=True
-                ).strip()
-            except Exception:
-                polypolish_alignments = "NA"
+        execution = json.loads(Path(input.execution).read_text())
+        polypolish_alignments = execution.get("polypolish", {}).get("mapped_alignments", "NA")
+        mapping_alignment_count = Path(input.mapping_count[0]).read_text().strip() if input.mapping_count else "NA"
 
         summary = {
             "isolate": iso,
             "run_mode": RUN_MODE[iso],
             "workflow_version": WORKFLOW_VERSION,
             "polish_mode_requested": POLISH_MODE,
+            "requested_polish_mode": POLISH_MODE,
+            "executed_stages": execution["executed_stages"],
+            "skipped_stages": execution["skipped_stages"],
+            "final_source_stage": execution["final_source_stage"],
+            "final_source_sha256": execution["final_source_sha256"],
+            "mapping_alignment_count": mapping_alignment_count,
 
             "run_kraken": KRAKEN_PROFILE_ENABLED,
             "kraken_decision_mode": kraken_decision_stats.get("kraken_decision_mode", "NA"),
@@ -3392,15 +3410,6 @@ rule run_summary:
             "kraken_inferred_target_rank": kraken_decision_stats.get("inferred_target_rank", "NA"),
             "kraken_inferred_target_percent": kraken_decision_stats.get("inferred_target_percent", "NA"),
             "kraken_target_selection_reason": kraken_decision_stats.get("target_selection_reason", "NA"),
-
-            "kraken_runner_up_taxid": kraken_decision_stats.get("runner_up_taxid", "NA"),
-            "kraken_runner_up_name": kraken_decision_stats.get("runner_up_name", "NA"),
-            "kraken_runner_up_percent": kraken_decision_stats.get("runner_up_percent", "NA"),
-            "kraken_selected_vs_runner_up_delta_percent": kraken_decision_stats.get("selected_vs_runner_up_delta_percent", "NA"),
-            "kraken_platform_agreement_score": kraken_decision_stats.get("platform_agreement_score", "NA"),
-            "kraken_platform_agreement_reason": kraken_decision_stats.get("platform_agreement_reason", "NA"),
-            "kraken_decision_confidence": kraken_decision_stats.get("decision_confidence", "NA"),
-            "kraken_awareness_state": kraken_decision_stats.get("awareness_state", "NA"),
 
             "kraken_runner_up_taxid": kraken_decision_stats.get("runner_up_taxid", "NA"),
             "kraken_runner_up_name": kraken_decision_stats.get("runner_up_name", "NA"),
@@ -3525,6 +3534,8 @@ rule run_summary:
 ###############################################################################
 
 rule qc_assessment:
+    params:
+        busco=RUN_BUSCO, kraken=KRAKEN_PROFILE_ENABLED, mode=lambda wc: RUN_MODE[wc.isolate], helper_sha=sha256_file(SUPPORT_FILE)
     input:
         run_summary=run_summary_tsv("{isolate}"),
         quast=quast_tsv("{isolate}"),
@@ -3560,7 +3571,7 @@ rule qc_assessment:
 
         def busco_complete_percent(path):
             for line in read_text(path).splitlines():
-                if line.startswith("C:"):
+                if "C:" in line:
                     try:
                         first = line.split("%")[0]
                         return first.replace("C:", "").strip()
@@ -3569,15 +3580,7 @@ rule qc_assessment:
             return "NA"
 
         def quast_metric(path, metric_name):
-            lines = read_text(path).splitlines()
-            if len(lines) >= 2:
-                header = lines[0].split("\t")
-                vals = lines[1].split("\t")
-                if metric_name in header:
-                    idx = header.index(metric_name)
-                    if idx < len(vals):
-                        return vals[idx]
-            return "NA"
+            return read_quast_metric(path, metric_name)
 
         runsum = read_metric_table(input.run_summary)
         cov = read_metric_table(input.cov)
@@ -3592,10 +3595,10 @@ rule qc_assessment:
 
         rows.append(("assembly_present", "PASS" if os.path.exists(final_asm(iso)) else "FAIL", "final assembly file existence"))
         rows.append(("quast_present", "PASS" if os.path.exists(input.quast) else "FAIL", "QUAST report presence"))
-        rows.append(("busco_present", "PASS" if os.path.exists(input.busco) else "FAIL", "BUSCO short summary presence"))
-        rows.append(("kraken_illumina_report_present", "PASS" if os.path.exists(input.kr_illumina) else "WARN", "Kraken Illumina report presence"))
-        rows.append(("kraken_nanopore_report_present", "PASS" if os.path.exists(input.kr_ont) else "WARN", "Kraken ONT report presence"))
-        rows.append(("fastp_report_present", "PASS" if os.path.exists(input.fastp_html) else "WARN", "fastp HTML report presence"))
+        rows.append(("busco_present", ("PASS" if os.path.getsize(input.busco) > 0 else "FAIL") if RUN_BUSCO else "SKIP", "BUSCO short summary presence"))
+        rows.append(("kraken_illumina_report_present", ("PASS" if os.path.getsize(input.kr_illumina) > 0 else "WARN") if KRAKEN_PROFILE_ENABLED and RUN_MODE[iso] != "ont_only" else "SKIP", "Kraken Illumina report presence"))
+        rows.append(("kraken_nanopore_report_present", ("PASS" if os.path.getsize(input.kr_ont) > 0 else "WARN") if KRAKEN_PROFILE_ENABLED and RUN_MODE[iso] != "illumina_only" else "SKIP", "Kraken ONT report presence"))
+        rows.append(("fastp_report_present", ("PASS" if os.path.getsize(input.fastp_html) > 0 else "WARN") if RUN_MODE[iso] != "ont_only" else "SKIP", "fastp HTML report presence"))
         rows.append(("seqkit_illumina_present", "PASS" if os.path.exists(input.seq_illumina) else "WARN", "seqkit Illumina summary presence"))
         rows.append(("seqkit_ont_present", "PASS" if os.path.exists(input.seq_ont) else "WARN", "seqkit ONT summary presence"))
         rows.append(("seqkit_assembly_present", "PASS" if os.path.exists(input.seq_asm) else "WARN", "seqkit assembly summary presence"))
@@ -3618,7 +3621,7 @@ rule qc_assessment:
         try:
             rows.append(("busco_complete_recorded", "PASS" if float(busco_c) >= 0 else "WARN", f"BUSCO_complete_percent={busco_c}"))
         except Exception:
-            rows.append(("busco_complete_recorded", "WARN", f"BUSCO_complete_unparseable={busco_c}"))
+            rows.append(("busco_complete_recorded", "WARN" if RUN_BUSCO else "SKIP", f"BUSCO_complete_unparseable={busco_c}"))
 
         try:
             covf = float(ont_cov)
@@ -3679,6 +3682,9 @@ rule multiqc_custom_content:
                 "run_mode\t"
                 "workflow_version\t"
                 "polish_mode\t"
+                "executed_stages\t"
+                "final_source_stage\t"
+                "final_source_sha256\t"
                 "target_taxid\t"
                 "kraken_decision_mode\t"
                 "kraken_decision\t"
@@ -3722,6 +3728,9 @@ rule multiqc_custom_content:
                 f"{s.get('run_mode', 'NA')}\t"
                 f"{s.get('workflow_version', 'NA')}\t"
                 f"{s.get('polish_mode_requested', 'NA')}\t"
+                f"{','.join(s.get('executed_stages', []))}\t"
+                f"{s.get('final_source_stage', 'NA')}\t"
+                f"{s.get('final_source_sha256', 'NA')}\t"
                 f"{s.get('target_taxid', 'NA')}\t"
                 f"{s.get('kraken_decision_mode', 'NA')}\t"
                 f"{s.get('kraken_decision', 'NA')}\t"

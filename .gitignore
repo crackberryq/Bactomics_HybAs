@@ -1,0 +1,17 @@
+.snakemake/
+__pycache__/
+*.pyc
+.pytest_cache/
+provenance/
+ci/provenance/
+ci/isolate_ci/work/
+ci/isolate_ci/trimmed/
+ci/isolate_ci/metadata/
+ci/isolate_ci/logs/
+ci/isolate_ci/reports/
+ci/isolate_ci/benchmarks/
+ci/isolate_ci/annotation/
+.hybas_runtime.log
+.validation_runtime.log
+config.local.yaml
+tests/.runs/
