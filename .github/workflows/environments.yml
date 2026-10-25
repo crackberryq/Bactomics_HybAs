@@ -47,6 +47,8 @@ jobs:
           channel-priority: strict
           conda-remove-defaults: true
       - run: |
+          cp config.example.yaml config.yaml
+          cp examples/samples.example.tsv samples.tsv
           snakemake --version
           python -c 'import yaml; import snakemake'
           snakemake -s Hybas.smk setup_envs --config setup_only=true --cores 2 -n

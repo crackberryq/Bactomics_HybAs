@@ -1,6 +1,13 @@
 # Usage
 
-Edit `config.yaml` and `samples.tsv` in the checkout, then:
+From a fresh clone, copy the tracked templates and edit your local files:
+
+```bash
+cp config.example.yaml config.yaml
+cp examples/samples.example.tsv samples.tsv
+```
+
+Then:
 
 ```bash
 conda activate hybas

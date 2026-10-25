@@ -1,4 +1,4 @@
-# Per-workstation paths and options. The source version is recorded separately.
+# HybAs workstation configuration template (copy to config.yaml; do not commit local paths)
 base_dir: ..
 sample_sheet: samples.tsv
 threads: 8
