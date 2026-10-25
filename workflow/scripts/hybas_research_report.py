@@ -9,7 +9,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from aware_read_audit import audit, decision
+from aware_read_audit import audit, audit_ont, decision
 
 
 STYLE = """
@@ -74,6 +74,13 @@ def generate(isolate, output_dir, with_audit):
     execution = read_json(isolate / "metadata/polish_execution.json")
     result = audit(isolate, output_dir, dec.get("selected_target_taxid", "")) if with_audit else {
         "status": "not_requested", "note": "Use --audit-reads to reconcile merged and cleaned FASTQs."}
+    ont = audit_ont(isolate, output_dir, dec.get("selected_target_taxid", "")) if with_audit else {"status": "not_requested"}
+    (output_dir / "aware_ont_filter_audit.json").write_text(json.dumps(ont, indent=2) + "\n", encoding="utf8")
+    if ont["status"] == "completed":
+        write_tsv(output_dir / "aware_ont_removed_taxa.tsv", ont["by_taxon"],
+                  ["taxid", "name", "rank", "category", "input_reads", "retained_reads", "removed_reads"])
+        write_tsv(output_dir / "aware_ont_removed_categories.tsv", ont["by_category"],
+                  ["category", "input_reads", "retained_reads", "removed_reads"])
     result["declared_illumina_action"] = dec.get("illumina_kraken_decision", "Not recorded")
     result["declared_ont_action"] = dec.get("ont_kraken_decision", "Not recorded")
     if result["status"] == "completed":
@@ -126,6 +133,16 @@ def generate(isolate, output_dir, with_audit):
                       ". This is not an independent verification of whitelist lineage membership.</p>")
     elif result.get("missing_files"):
         audit_html += "<p class='note'>Missing inputs: " + esc(", ".join(result["missing_files"])) + "</p>"
+    ont_html = "<p class='warn'>ONT audit: " + esc(ont["status"]) + "</p>"
+    if ont["status"] == "completed":
+        ont_html = ("<p class='badge'>ONT read reconciliation: " +
+                    ("PASS" if ont["integrity_ok"] else "ATTENTION") + "</p>" +
+                    key_values(ont["totals"], list(ont["totals"])) +
+                    "<h3>ONT removed reads by category</h3>" +
+                    table(["category", "input_reads", "retained_reads", "removed_reads"], ont["by_category"]) +
+                    "<h3>ONT taxonomic assignments</h3>" +
+                    table(["taxid", "name", "category", "input_reads", "retained_reads", "removed_reads"],
+                          ont["by_taxon"][:500]))
     stages = execution.get("stages", [])
     stage_rows = [{"Stage": s.get("stage"), "FASTA bases": s.get("bases"),
                    "Contigs": s.get("contigs"), "SHA256": s.get("sha256")} for s in stages]
@@ -145,6 +162,7 @@ def generate(isolate, output_dir, with_audit):
         "A low confidence label does not override a platform's passthrough.</p>" +
         key_values(dec, keys) + "</div></section>"
         "<section id='removed'><h2>Removed-read origins</h2><div class='panel'>" + audit_html +
+        "<h3>ONT filtering</h3>" + ont_html +
         "<p class='note'>Kraken classifications are taxonomic assignments, not confirmed biological origin. "
         "Paired reads are counted once per normalized pair identifier. No read sequences or IDs are exported.</p>"
         "</div></section>"
@@ -157,7 +175,9 @@ def generate(isolate, output_dir, with_audit):
         "<section id='provenance'><h2>Evidence and exports</h2><div class='panel'>"
         "<p><a href='aware_filter_audit.json'>Filtering audit JSON</a> · "
         "<a href='aware_removed_taxa.tsv'>Taxon-level TSV</a> · "
-        "<a href='aware_removed_categories.tsv'>Category TSV</a></p>"
+        "<a href='aware_removed_categories.tsv'>Category TSV</a> · " +
+        "<a href='aware_ont_filter_audit.json'>ONT audit JSON</a> · " +
+        "<a href='aware_ont_removed_taxa.tsv'>ONT taxon TSV</a></p>"
         "<p class='note'>TSV exports exist only when a complete read audit was possible. "
         "Source files: metadata/kraken_decision.tsv, metadata/run_summary.json, "
         "metadata/polish_execution.json, reports/kraken2, work/inputs_merged, work/inputs_cleaned.</p>"
