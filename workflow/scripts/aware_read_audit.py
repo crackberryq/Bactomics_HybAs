@@ -80,6 +80,14 @@ def audit(isolate, output_dir, selected_taxid):
              "b2": before / "illumina_R2.merged.fq.gz",
              "a1": after / "illumina_R1.clean.fq.gz",
              "a2": after / "illumina_R2.clean.fq.gz"}
+    # Historical HybAs stores merged and cleaned FASTQs directly under work/.
+    legacy = {"b1": isolate / "work/illumina_R1.merged.fq.gz",
+              "b2": isolate / "work/illumina_R2.merged.fq.gz",
+              "a1": isolate / "work/illumina_R1.clean.fq.gz",
+              "a2": isolate / "work/illumina_R2.clean.fq.gz"}
+    for key in paths:
+        if not paths[key].is_file() and legacy[key].is_file():
+            paths[key] = legacy[key]
     assignments = kraken / "illumina.kraken2.txt"
     missing = [str(p) for p in [*paths.values(), assignments] if not p.is_file()]
     if missing:
@@ -186,6 +194,10 @@ def audit_ont(isolate, output_dir, selected_taxid):
     cleaned = isolate / "work/inputs_cleaned/ont_clean.fastq.gz"
     kr = isolate / "reports/kraken2/nanopore.kraken2.txt"
     report = isolate / "reports/kraken2/nanopore.report.txt"
+    if not merged.is_file() and (isolate / "work/ont_merged.fastq.gz").is_file():
+        merged = isolate / "work/ont_merged.fastq.gz"
+    if not cleaned.is_file() and (isolate / "work/ont_clean.fastq.gz").is_file():
+        cleaned = isolate / "work/ont_clean.fastq.gz"
     missing = [str(p) for p in (merged, cleaned, kr) if not p.is_file()]
     if missing:
         return {"status": "unavailable", "missing_files": missing}
