@@ -1,5 +1,9 @@
 # HybAs 9.0.0-AWARE
 
+[![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+[Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
+
 HybAs is a native Snakemake workflow for hybrid, Illumina-only and ONT-only bacterial assembly, with taxon-aware read handling, optional polishing, QC and provenance. Run `Hybas.smk` directly. Snakemake creates and activates the rule environments; there is no HybAs Python package to install.
 
 This release fixes execution and reporting defects in the v8.8 source (`b14ff7688b72f1ae4a39bd99a4305d16a0e53ec1`). See [CHANGELOG.md](CHANGELOG.md) for behavior changes and validation limits. Preserve the old checkout and outputs when comparing versions.
@@ -14,6 +18,9 @@ cd HybAs
 export CONDARC="$PWD/.condarc"
 conda env create -f environment.yaml
 conda activate hybas
+cp config.example.yaml config.yaml
+cp examples/samples.example.tsv samples.tsv
+# Edit config.yaml and samples.tsv for your workstation before normal analysis.
 snakemake -s Hybas.smk setup_envs --use-conda --cores 4 --config setup_only=true
 ```
 
@@ -23,7 +30,7 @@ An existing environment can be updated with `conda env update -n hybas -f enviro
 
 ## Configure a run
 
-Edit `config.yaml` and `samples.tsv` locally. `samples.tsv` is intentionally header-only; `examples/samples.example.tsv` shows the columns. Paths are resolved from the working directory. `base_dir` is the directory containing isolate folders; database paths are beneath `base_dir/db` unless configured otherwise.
+Create your local `config.yaml` and `samples.tsv` from `config.example.yaml` and `examples/samples.example.tsv` (as shown under Install), then edit them locally. Both runtime files are gitignored to prevent accidental commits of workstation paths or sample metadata. Paths are resolved from the working directory. `base_dir` is the directory containing isolate folders; database paths are beneath `base_dir/db` unless configured otherwise.
 
 Each sample requires an `isolate` column. Optional columns are `target_taxid`, `busco_lineage` and `medaka_model`. Isolate names must be unique and contain only letters, digits, dots, underscores or hyphens, beginning with a letter or digit.
 
@@ -151,3 +158,9 @@ The dashboard launches Snakemake directly. It is not required for setup, executi
 ## Citation and license
 
 See [CITATION.cff](CITATION.cff) for citation metadata and [LICENSE](LICENSE) for license terms. Publication benchmark results belong to the version and inputs used to generate them; this update does not retroactively revalidate them.
+
+## Repository maintenance and releases
+
+The default branch may remain on a historical version until the repository owner changes it in **Settings → General → Default branch**. For v9.0, use the explicitly versioned branch shown in the clone command. The current CI checks validate software orchestration with mocks; they do not substitute for real-tool assembly qualification.
+
+Repository contributors should use feature branches and pull requests; see [CONTRIBUTING](.github/CONTRIBUTING.md) and [SECURITY](SECURITY.md). Release notes for this version are in [docs/releases/v9.0.0-AWARE.md](docs/releases/v9.0.0-AWARE.md). To publish a GitHub Release, create a tag at the validated commit and publish it from the Releases page after CI passes.
