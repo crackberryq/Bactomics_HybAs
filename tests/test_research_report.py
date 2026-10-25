@@ -119,3 +119,30 @@ def test_ont_taxonomic_removed_reads(tmp_path):
     assert categories["Human-assigned"] == 1
     assert categories["Other bacteria"] == 1
     assert (iso / "reports/hybas_research/aware_ont_removed_taxa.tsv").exists()
+
+
+def test_historical_work_layout_and_stage_qc(tmp_path):
+    iso = fixture(tmp_path)
+    work = iso / "work"
+    for mate in ("R1", "R2"):
+        for suffix, old_dir in (("merged", "inputs_merged"), ("clean", "inputs_cleaned")):
+            old = work / old_dir / f"illumina_{mate}.{suffix}.fq.gz"
+            old.rename(work / old.name)
+    (iso / "metadata/kraken_decision.tsv").unlink()
+    quast = iso / "reports/quast"
+    quast.mkdir()
+    (quast / "report.txt").write_text(
+        "Assembly\tassembly\n# contigs\t3\nTotal length\t4567890\nN50\t250000\nGC (%)\t62.5\n")
+    stage = iso / "reports/FINAL_AUDIT_RESULTS/QC_ASSEMBLY/qc_steps/04_Polypolish"
+    stage.mkdir(parents=True)
+    (stage / "report.txt").write_text(
+        "Assembly\tassembly\n# contigs\t2\nTotal length\t4567890\nN50\t450000\nGC (%)\t62.5\n")
+    run(tmp_path, "--audit-reads")
+    output = iso / "reports/hybas_research"
+    result = json.loads((output / "aware_filter_audit.json").read_text())
+    assert result["status"] == "completed"
+    assert result["totals"]["removed_pairs"] == 3
+    page = (output / "hybas_report.html").read_text()
+    assert "4567890" in page and "450000" in page
+    assert "Historical run: AWARE decision metadata was not found" in page
+    assert "stage-graph" in page
