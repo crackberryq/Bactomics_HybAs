@@ -164,3 +164,21 @@ See [CITATION.cff](CITATION.cff) for citation metadata and [LICENSE](LICENSE) fo
 The default branch may remain on a historical version until the repository owner changes it in **Settings → General → Default branch**. For v9.0, use the explicitly versioned branch shown in the clone command. The current CI checks validate software orchestration with mocks; they do not substitute for real-tool assembly qualification.
 
 Repository contributors should use feature branches and pull requests; see [CONTRIBUTING](.github/CONTRIBUTING.md) and [SECURITY](SECURITY.md). Release notes for this version are in [docs/releases/v9.0.0-AWARE.md](docs/releases/v9.0.0-AWARE.md). To publish a GitHub Release, create a tag at the validated commit and publish it from the Releases page after CI passes.
+
+## Experimental HybAs Research Report (standalone; no analysis rerun)
+
+An optional offline, BaSIS-inspired HTML report can be generated from an **existing** isolate folder. This reporting-only tool does not modify the Snakefile, rerun Kraken, assemble genomes, or replace MultiQC.
+
+```bash
+conda activate hybas
+python workflow/scripts/hybas_research_report.py \
+  --base-dir /home/jimi/bactomics/TB_RUN \
+  --isolate isolate001 \
+  --audit-reads
+```
+
+Open `<base_dir>/<isolate>/reports/hybas_research/hybas_report.html`. The report shows AWARE target election, independent platform actions, confidence, assembly and polishing evidence, and an optional disk-backed read-ID audit. It reuses saved Kraken assignments and reconciles original merged FASTQs with cleaned FASTQs; it **does not classify reads again**.
+
+Outputs include `aware_filter_audit.json`, `aware_removed_taxa.tsv`, and `aware_removed_categories.tsv` when inputs are available. Human, bacterial, viral, fungal and other labels are **Kraken taxonomic assignments**, not confirmed biological origins. The audit counts read pairs, not independent mates. An integrity PASS verifies observed retention and assignment reconciliation, **not** biological correctness or every descendant whitelist decision.
+
+For large datasets the temporary SQLite audit needs disk space and time. Omit `--audit-reads` for a quick evidence-only HTML report. This experimental tool is independent of the production DAG; do not audit files while an active job is writing them.
