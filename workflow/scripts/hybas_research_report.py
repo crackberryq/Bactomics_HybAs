@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from aware_read_audit import audit, audit_ont, decision
+from hybas_report_compat import evidence
 
 
 STYLE = """
@@ -34,6 +35,29 @@ code{overflow-wrap:anywhere}.badge{display:inline-block;background:#e6f2ef;color
 input{width:100%;padding:10px;border:1px solid var(--line);border-radius:7px;margin-bottom:10px}
 a{color:var(--teal)}footer{font-size:11px;color:var(--muted);padding:30px 0}
 @media(max-width:850px){.app{display:block}aside{position:static;height:auto}main{padding:16px}.grid{grid-template-columns:repeat(2,1fr)}}
+
+/* Bactologix-inspired refinement: clean hierarchy, responsive metrics and evidence graphs */
+:root{--navy:#102c35;--teal:#136d68;--paper:#f5f7f6;--line:#dce4e3;--muted:#6d7e84}
+body{font-size:14px;line-height:1.58}
+aside{background:#112d35;padding:34px 19px}
+aside a{font-size:13px;border-radius:9px;margin:4px 0}
+main{padding:34px 44px;max-width:1520px}
+.hero{background:radial-gradient(ellipse at 92% 0%,#276976 0%,transparent 52%),linear-gradient(115deg,#142d43,#173e52);padding:43px 40px;box-shadow:0 8px 28px #112d3510}
+.hero h1{font-weight:720;letter-spacing:-1px}
+.stat,.panel{box-shadow:0 3px 18px rgba(25,47,65,.045);border-radius:14px}
+.stat{position:relative;overflow:hidden;padding:23px}
+.stat:before{content:"";position:absolute;top:0;left:22px;width:30px;height:3px;background:#087c78}
+.stat strong{font-size:clamp(22px,2.6vw,34px);font-weight:740;letter-spacing:-.8px}
+section{margin-top:38px}section h2{font-weight:710;letter-spacing:-.5px}
+.table-wrap{border:1px solid var(--line);border-radius:9px;margin-top:14px}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.7px;background:#f5f9f8}
+td{font-variant-numeric:tabular-nums}
+.stage-graph{padding:20px;background:#f8faf9;border:1px solid var(--line);border-radius:11px;margin:15px 0}
+.stage-bar-row{display:grid;grid-template-columns:minmax(130px,1fr) minmax(100px,2fr) 85px;gap:13px;align-items:center;margin:11px 0;font-size:12px}
+.stage-bar-row>span{overflow-wrap:anywhere}.stage-bar-row>strong{text-align:right;font-variant-numeric:tabular-nums}
+.stage-track{height:15px;border-radius:5px;background:#e1e9e6;overflow:hidden}
+.stage-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,#137e79,#6bc1ad)}
+@media(max-width:900px){main{padding:20px}.stage-bar-row{grid-template-columns:110px minmax(75px,1fr) 60px}}
 """
 
 
@@ -71,6 +95,7 @@ def generate(isolate, output_dir, with_audit):
     output_dir.mkdir(parents=True, exist_ok=True)
     dec = decision(isolate / "metadata/kraken_decision.tsv")
     summary = read_json(isolate / "metadata/run_summary.json")
+    summary, historical_stages, evidence_sources = evidence(isolate, summary)
     execution = read_json(isolate / "metadata/polish_execution.json")
     result = audit(isolate, output_dir, dec.get("selected_target_taxid", "")) if with_audit else {
         "status": "not_requested", "note": "Use --audit-reads to reconcile merged and cleaned FASTQs."}
@@ -102,7 +127,7 @@ def generate(isolate, output_dir, with_audit):
         "Run mode": summary.get("run_mode", "Not recorded"),
         "Assembly size": summary.get("assembly_bp", "Not recorded"),
         "N50": summary.get("quast_n50", "Not recorded"),
-        "Polishing": ", ".join(execution.get("executed_stages", [])) or "None recorded"
+        "BUSCO complete": (str(summary.get("busco_complete_percent", "—")) + "%") if summary.get("busco_complete_percent") else "Not recorded"
     }
     stats = "".join("<div class='stat'><small>" + esc(k) + "</small><strong>" + esc(v) + "</strong></div>"
                     for k, v in overview.items())
@@ -146,6 +171,38 @@ def generate(isolate, output_dir, with_audit):
     stages = execution.get("stages", [])
     stage_rows = [{"Stage": s.get("stage"), "FASTA bases": s.get("bases"),
                    "Contigs": s.get("contigs"), "SHA256": s.get("sha256")} for s in stages]
+    historical_rows = [{"Stage": x["stage"], "Contigs": x["contigs"],
+                        "Assembly (bp)": x["assembly_bp"], "N50 (bp)": x["n50"],
+                        "GC (%)": x["gc"]} for x in historical_stages]
+    def numeric(value):
+        try:
+            return float(str(value).replace(",", ""))
+        except (TypeError, ValueError):
+            return None
+    numeric_n50 = [numeric(x["n50"]) for x in historical_stages]
+    valid_n50 = [v for v in numeric_n50 if v is not None and v >= 0]
+    scale = max(valid_n50) if valid_n50 else 0
+    stage_graph = "".join(
+        "<div class='stage-bar-row'><span>" + esc(x["stage"]) + "</span>"
+        "<div class='stage-track'><div class='stage-fill' style='width:" +
+        str(round(100 * v / scale, 2) if scale and v is not None and v >= 0 else 0) +
+        "%'></div></div><strong>" + esc(x["n50"]) + "</strong></div>"
+        for x, v in zip(historical_stages, numeric_n50)
+    )
+    stage_section = ("<h3>Assembly-stage N50 comparison</h3><p class='note'>"
+                     "Historical QUAST evidence; stages are observations, not proof that a stage executed "
+                     "in this report's current environment.</p><div class='stage-graph'>" +
+                     stage_graph + "</div>" +
+                     table(["Stage", "Contigs", "Assembly (bp)", "N50 (bp)", "GC (%)"],
+                           historical_rows)) if historical_rows else (
+                     "<p class='warn'>No compatible stage-by-stage QUAST reports found.</p>")
+    provenance_rows = [{"Evidence": k, "Source": v} for k, v in sorted(evidence_sources.items())]
+    if not dec:
+        decision_notice = ("<p class='warn'>Historical run: AWARE decision metadata was not found. "
+                           "Kraken classifications may still be available, but a target decision, "
+                           "confidence or whitelist action cannot be reconstructed reliably.</p>")
+    else:
+        decision_notice = ""
     generated = datetime.now(timezone.utc).isoformat()
     body = (
         "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
@@ -160,7 +217,7 @@ def generate(isolate, output_dir, with_audit):
         "<section id='aware'><h2>AWARE decision explorer</h2><div class='panel'>"
         "<p class='note'>Target election, per-platform read actions and conservative confidence are separate outputs. "
         "A low confidence label does not override a platform's passthrough.</p>" +
-        key_values(dec, keys) + "</div></section>"
+        decision_notice + key_values(dec, keys) + "</div></section>"
         "<section id='removed'><h2>Removed-read origins</h2><div class='panel'>" + audit_html +
         "<h3>ONT filtering</h3>" + ont_html +
         "<p class='note'>Kraken classifications are taxonomic assignments, not confirmed biological origin. "
@@ -171,7 +228,7 @@ def generate(isolate, output_dir, with_audit):
                                "executed_stages", "skipped_stages", "final_source_stage",
                                "final_source_path", "final_source_sha256"]) +
         "<h3>Recorded assembly stages</h3>" +
-        table(["Stage", "FASTA bases", "Contigs", "SHA256"], stage_rows) + "</div></section>"
+        table(["Stage", "FASTA bases", "Contigs", "SHA256"], stage_rows) + stage_section + "</div></section>"
         "<section id='provenance'><h2>Evidence and exports</h2><div class='panel'>"
         "<p><a href='aware_filter_audit.json'>Filtering audit JSON</a> · "
         "<a href='aware_removed_taxa.tsv'>Taxon-level TSV</a> · "
