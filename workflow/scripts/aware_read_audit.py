@@ -178,3 +178,92 @@ def audit(isolate, output_dir, selected_taxid):
             os.unlink(dbfile)
         except FileNotFoundError:
             pass
+
+
+def audit_ont(isolate, output_dir, selected_taxid):
+    """Single-read ONT counterpart; compare pre-AWARE merged and cleaned reads."""
+    merged = isolate / "work/inputs_merged/ont_merged.fastq.gz"
+    cleaned = isolate / "work/inputs_cleaned/ont_clean.fastq.gz"
+    kr = isolate / "reports/kraken2/nanopore.kraken2.txt"
+    report = isolate / "reports/kraken2/nanopore.report.txt"
+    missing = [str(p) for p in (merged, cleaned, kr) if not p.is_file()]
+    if missing:
+        return {"status": "unavailable", "missing_files": missing}
+    if merged.stat().st_size == 0:
+        return {"status": "not_applicable", "reason": "No ONT input"}
+    fd, dbfile = tempfile.mkstemp(prefix=".aware_ont_audit_", suffix=".sqlite", dir=output_dir)
+    os.close(fd)
+    conn = sqlite3.connect(dbfile)
+    try:
+        conn.execute("CREATE TABLE reads(id TEXT PRIMARY KEY, before_count INT DEFAULT 0, "
+                     "after_count INT DEFAULT 0, taxid TEXT, kc INT DEFAULT 0)")
+        for path, col in ((merged, "before_count"), (cleaned, "after_count")):
+            sql = ("INSERT INTO reads(id," + col + ") VALUES (?,1) ON CONFLICT(id) DO UPDATE SET " +
+                   col + "=" + col + "+1")
+            batch = []
+            for rid in ids(path):
+                batch.append((rid,))
+                if len(batch) >= 10000:
+                    conn.executemany(sql, batch)
+                    batch.clear()
+            if batch:
+                conn.executemany(sql, batch)
+            conn.commit()
+        batch = []
+        sql = ("INSERT INTO reads(id,taxid,kc) VALUES (?,?,1) ON CONFLICT(id) DO UPDATE SET "
+               "kc=kc+1,taxid=CASE WHEN taxid=excluded.taxid THEN taxid ELSE '-1' END")
+        with kr.open(encoding="utf8", errors="replace") as f:
+            for line in f:
+                p = line.rstrip("\r\n").split("\t")
+                if len(p) >= 3 and p[0] in ("C", "U"):
+                    tid = p[2] if p[0] == "C" else "0"
+                    batch.append((canonical_id(p[1]), tid if tid.isdigit() else "-1"))
+                    if len(batch) >= 10000:
+                        conn.executemany(sql, batch)
+                        batch.clear()
+        if batch:
+            conn.executemany(sql, batch)
+        conn.commit()
+        names = ["input_reads", "retained_reads", "removed_reads", "unexpected_output_ids",
+                 "duplicate_fastq_ids", "unmatched_kraken_reads", "duplicate_kraken_ids"]
+        values = conn.execute("""
+            SELECT SUM(before_count=1), SUM(before_count=1 AND after_count=1),
+                   SUM(before_count=1 AND after_count=0),
+                   SUM(after_count>0 AND before_count=0),
+                   SUM(before_count>1 OR after_count>1),
+                   SUM(before_count=1 AND kc=0), SUM(kc>1)
+            FROM reads
+        """).fetchone()
+        totals = dict(zip(names, [v or 0 for v in values]))
+        taxa = taxonomy(report)
+        rows = []
+        for tid, b, r, removed in conn.execute("""
+            SELECT COALESCE(taxid,'-1'),COUNT(*),SUM(after_count=1),SUM(after_count=0)
+            FROM reads WHERE before_count=1 GROUP BY COALESCE(taxid,'-1')
+        """):
+            node = taxa.get(tid)
+            rows.append({"taxid": tid, "name": node["name"] if node else
+                         ("Unclassified" if tid == "0" else "Unresolved assignment"),
+                         "rank": node["rank"] if node else "",
+                         "category": category(tid, node, selected_taxid),
+                         "input_reads": b, "retained_reads": r or 0, "removed_reads": removed or 0})
+        rows.sort(key=lambda x: (-x["removed_reads"], x["taxid"]))
+        cats = {}
+        for row in rows:
+            c = cats.setdefault(row["category"], {"category": row["category"],
+                               "input_reads": 0, "retained_reads": 0, "removed_reads": 0})
+            for k in ("input_reads", "retained_reads", "removed_reads"):
+                c[k] += row[k]
+        valid = (totals["input_reads"] == totals["retained_reads"] + totals["removed_reads"]
+                 and all(totals[k] == 0 for k in names[3:]))
+        return {"status": "completed", "unit": "read_ids", "totals": totals,
+                "integrity_ok": valid, "by_taxon": rows,
+                "by_category": sorted(cats.values(), key=lambda x: -x["removed_reads"]),
+                "limitations": ["Kraken assignments do not establish biological origin.",
+                                "Taxonomic lineage is reconstructed from the saved report."]}
+    finally:
+        conn.close()
+        try:
+            os.unlink(dbfile)
+        except FileNotFoundError:
+            pass
