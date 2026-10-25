@@ -99,3 +99,23 @@ def test_report_without_read_audit(tmp_path):
     result = json.loads((out / "aware_filter_audit.json").read_text())
     assert result["status"] == "not_requested"
     assert (out / "hybas_report.html").is_file()
+
+
+def test_ont_taxonomic_removed_reads(tmp_path):
+    iso = fixture(tmp_path)
+    before = iso / "work/inputs_merged/ont_merged.fastq.gz"
+    after = iso / "work/inputs_cleaned/ont_clean.fastq.gz"
+    fq(before, ["target", "human", "other"])
+    fq(after, ["target"])
+    kr = iso / "reports/kraken2"
+    (kr / "nanopore.kraken2.txt").write_text(
+        "C\ttarget\t1763\t4\tA\nC\thuman\t9606\t4\tA\nC\tother\t562\t4\tA\n")
+    (kr / "nanopore.report.txt").write_text((kr / "illumina.report.txt").read_text())
+    run(tmp_path, "--audit-reads")
+    result = json.loads((iso / "reports/hybas_research/aware_ont_filter_audit.json").read_text())
+    assert result["integrity_ok"]
+    assert result["totals"]["removed_reads"] == 2
+    categories = {row["category"]: row["removed_reads"] for row in result["by_category"]}
+    assert categories["Human-assigned"] == 1
+    assert categories["Other bacteria"] == 1
+    assert (iso / "reports/hybas_research/aware_ont_removed_taxa.tsv").exists()
