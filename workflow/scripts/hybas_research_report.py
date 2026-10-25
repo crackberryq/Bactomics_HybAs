@@ -230,6 +230,7 @@ def generate(isolate, output_dir, with_audit):
         "<h3>Recorded assembly stages</h3>" +
         table(["Stage", "FASTA bases", "Contigs", "SHA256"], stage_rows) + stage_section + "</div></section>"
         "<section id='provenance'><h2>Evidence and exports</h2><div class='panel'>"
+        "<h3>Discovered evidence</h3>" + table(["Evidence", "Source"], provenance_rows) +
         "<p><a href='aware_filter_audit.json'>Filtering audit JSON</a> · "
         "<a href='aware_removed_taxa.tsv'>Taxon-level TSV</a> · "
         "<a href='aware_removed_categories.tsv'>Category TSV</a> · " +
