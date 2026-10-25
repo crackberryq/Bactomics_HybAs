@@ -107,7 +107,7 @@ def audit(isolate, output_dir, selected_taxid):
             conn.commit()
             counts[col] = n
         sql = ("INSERT INTO reads(id,taxid,kc) VALUES (?,?,1) ON CONFLICT(id) DO UPDATE SET "
-               "kc=kc+1,taxid=CASE WHEN taxid=excluded.taxid THEN taxid ELSE '-1' END")
+               "kc=kc+1,taxid=CASE WHEN taxid IS NULL THEN excluded.taxid WHEN taxid=excluded.taxid THEN taxid ELSE '-1' END")
         batch, n = [], 0
         with assignments.open(encoding="utf8", errors="replace") as f:
             for line in f:
@@ -211,7 +211,7 @@ def audit_ont(isolate, output_dir, selected_taxid):
             conn.commit()
         batch = []
         sql = ("INSERT INTO reads(id,taxid,kc) VALUES (?,?,1) ON CONFLICT(id) DO UPDATE SET "
-               "kc=kc+1,taxid=CASE WHEN taxid=excluded.taxid THEN taxid ELSE '-1' END")
+               "kc=kc+1,taxid=CASE WHEN taxid IS NULL THEN excluded.taxid WHEN taxid=excluded.taxid THEN taxid ELSE '-1' END")
         with kr.open(encoding="utf8", errors="replace") as f:
             for line in f:
                 p = line.rstrip("\r\n").split("\t")
