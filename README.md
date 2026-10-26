@@ -132,6 +132,16 @@ Within each isolate directory:
 
 Global provenance is stored under `<base_dir>/provenance/`, including effective configuration, source hashes and deployed environment manifests. MultiQC explicitly depends on the custom summary and its configuration, so a summary refresh also refreshes the report.
 
+Computational recording is enabled for every execution on the v10 branch. All
+concrete rules have native benchmarks, and extended measurements are enabled even
+when using a custom profile. Each invocation retains its own hardware/runner
+record, job attempts, timings and available CPU, memory and I/O measurements under
+`provenance/runtime/computational_runs/<run-id>/`. Failed attempts and later resumes
+are kept separately; existing results are not counted as new computation.
+`provenance/runtime/computational_report.html` provides the combined history and
+is included in the Snakemake report. See [computational data](docs/COMPUTATIONAL_DATA.md)
+for fields, units and measurement limits.
+
 ```bash
 snakemake -s Hybas.smk --report hybas_report.html
 ```

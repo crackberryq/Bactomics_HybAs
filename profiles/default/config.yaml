@@ -6,3 +6,4 @@ resources:
 rerun-incomplete: true
 printshellcmds: false
 show-failed-logs: true
+benchmark-extended: true

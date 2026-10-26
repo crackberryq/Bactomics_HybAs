@@ -144,11 +144,13 @@ unwraps Snakemake's newer `Resource.value` object in the memory-budget check;
 it also accepts the scalar resource values used by 9.6.2. Reservation values,
 AWARE decisions, scientific routes and rule environment recipes are unchanged.
 
-The full local software suite passes 184 tests on 9.27.1 using the documented
-container benchmark workaround; 13 existing DAG/budget checks also pass on
-9.6.2. Native Conda installation and normal benchmarking remain CI checks.
+The runner upgrade passed 184 local software tests on 9.27.1 using the documented
+container benchmark workaround, plus 13 existing DAG/budget checks on 9.6.2.
+Subsequent computational-record tests cover run history, failure/resume, missing
+measurements and report export. Native Conda installation and normal benchmarking
+remain CI checks. Computational collection targets the pinned 9.27.1 runner.
 
-Bactologix 0.1.0a17's proposed installer reads the selected release's environment
+Bactologix 0.1.0a17's published installer reads the selected release's environment
 file, installs/checks that release's runner, then activates it. Different
 requirements use a separate environment. Older runners and cached rule
 environments are retained. No global "install latest Snakemake" operation is

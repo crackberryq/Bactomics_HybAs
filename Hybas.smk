@@ -56,6 +56,7 @@ from workflow_support import (VERSION, normalize_taxid, manual_taxid, validate_i
     pair_illumina_files, validate_input_files, polish_plan, busco_db_ready as valid_busco_db,
     file_identity, require_fasta, write_json, quast_metric as read_quast_metric)
 from datetime import datetime
+from computational import install_recorder, render_report
 from snakemake.io import report, directory, touch
 
 def as_bool(x):
@@ -1125,6 +1126,7 @@ rule all:
     input:
         lambda wc: environment_outputs(),
         provenance_condarc_file(),
+        os.path.join(provenance_runtime_dir(), "computational_report.html"),
         provenance_system_info(),
         provenance_workflow_info(),
         provenance_db_hashes(),
@@ -1298,6 +1300,8 @@ rule save_condarc:
         provenance_condarc_file()
     message:
         "Saving project-scoped .condarc used for this HybAs run"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "save_condarc.tsv")
     run:
         os.makedirs(provenance_conda_dir(), exist_ok=True)
         if os.path.exists(PROJECT_CONDARC):
@@ -1321,6 +1325,8 @@ rule global_system_info:
         provenance_system_info()
     message:
         "Capturing global system/runtime provenance"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "global_system_info.tsv")
     run:
         import subprocess
         os.makedirs(provenance_runtime_dir(), exist_ok=True)
@@ -1361,6 +1367,8 @@ rule global_workflow_provenance:
         provenance_workflow_info()
     message:
         "Capturing workflow/config/sample-sheet provenance"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "global_workflow_provenance.tsv")
     run:
         os.makedirs(provenance_runtime_dir(), exist_ok=True)
 
@@ -1412,6 +1420,8 @@ rule capture_env_assembly_global:
     conda: "workflow/envs/assembly.yml"
     message:
         "Capturing assembly environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_assembly_global.tsv")
     shell:
         r"""
         set -euo pipefail
@@ -1435,6 +1445,8 @@ rule capture_env_qc_global:
     conda: "workflow/envs/qc.yml"
     message:
         "Capturing QC environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_qc_global.tsv")
     shell:
         r"""
         set -euo pipefail
@@ -1458,6 +1470,8 @@ rule capture_env_polishing_global:
     conda: "workflow/envs/polishing.yml"
     message:
         "Capturing polishing environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_polishing_global.tsv")
     shell:
         r"""
         set -euo pipefail
@@ -1481,6 +1495,8 @@ rule capture_env_medaka_global:
     conda: "workflow/envs/medaka.yml"
     message:
         "Capturing medaka environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_medaka_global.tsv")
     shell:
         r"""
         set -euo pipefail
@@ -1504,6 +1520,8 @@ rule capture_env_annotation_global:
     conda: "workflow/envs/annotation.yml"
     message:
         "Capturing annotation environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_annotation_global.tsv")
     shell:
         r"""
         set -euo pipefail
@@ -1525,6 +1543,8 @@ rule database_hashes:
         provenance_db_hashes()
     message:
         "Hashing database core files for provenance"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "database_hashes.tsv")
     run:
         os.makedirs(provenance_db_dir(), exist_ok=True)
 
@@ -1561,6 +1581,8 @@ rule global_input_hashes:
         provenance_input_hashes()
     message:
         "Hashing global workflow inputs"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "global_input_hashes.tsv")
     run:
         os.makedirs(provenance_runtime_dir(), exist_ok=True)
 
@@ -1596,6 +1618,8 @@ rule download_kraken_db:
     log: os.path.join(BASE_DIR, "provenance", "databases", "kraken_build.log")
     resources: mem_mb=KRAKEN_MEM_MB, kraken_jobs=1
     threads: THREADS
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "download_kraken_db.tsv")
     shell:
         r"""
         mkdir -p "$(dirname "{log}")"
@@ -1626,6 +1650,8 @@ rule download_busco_lineage:
     log: os.path.join(BASE_DIR, "provenance", "databases", "busco_{lineage}.log")
     threads: 1
     message: "Prepare and verify BUSCO lineage {wildcards.lineage}"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "download_busco_lineage_{lineage}.tsv")
     shell:
         r"""
         mkdir -p "{params.dbdir}" "$(dirname "{log}")"
@@ -1667,6 +1693,8 @@ rule system_info:
             category="Run metadata",
             subcategory="System info",
         )
+    benchmark:
+        bench("{isolate}", "system_info")
     run:
         os.makedirs(metadata_dir(wildcards.isolate), exist_ok=True)
         with open(output[0], "w", encoding="utf-8") as out:
@@ -1690,6 +1718,8 @@ rule workflow_provenance:
             category="Run metadata",
             subcategory="Workflow provenance",
         )
+    benchmark:
+        bench("{isolate}", "workflow_provenance")
     run:
         os.makedirs(metadata_dir(wildcards.isolate), exist_ok=True)
         cfg_checksum = sha256_file(CONFIG_FILES[-1]) if CONFIG_FILES else "NA"
@@ -1818,6 +1848,8 @@ rule fastqc_pre:
     threads: 2
     message:
         logmsg(3, "FastQC raw merged Illumina")
+    benchmark:
+        bench("{isolate}", "fastqc_pre")
     shell:
         r"""
         mkdir -p "$(dirname "{log}")"
@@ -1844,6 +1876,8 @@ rule nanoplot_raw:
     threads: 2
     message:
         logmsg(4, "NanoPlot raw ONT")
+    benchmark:
+        bench("{isolate}", "nanoplot_raw")
     shell:
         r"""
         mkdir -p "$(dirname "{log}")"
@@ -1987,6 +2021,8 @@ rule kraken_decision:
             category="Run metadata",
             subcategory="Kraken decision",
         )
+    benchmark:
+        bench("{isolate}", "kraken_decision")
     run:
         iso = wildcards.isolate
         os.makedirs(metadata_dir(iso), exist_ok=True)
@@ -2301,6 +2337,8 @@ rule nanoplot_filt:
     threads: 2
     message:
         logmsg(11, "NanoPlot filtered ONT")
+    benchmark:
+        bench("{isolate}", "nanoplot_filt")
     shell:
         r"""
         mkdir -p "$(dirname "{log}")"
@@ -2332,6 +2370,8 @@ rule run_mode:
         kraken=KRAKEN_DECISION_MODE
     output:
         run_mode_file("{isolate}")
+    benchmark:
+        bench("{isolate}", "run_mode")
     run:
         os.makedirs(metadata_dir(wildcards.isolate), exist_ok=True)
         with open(output[0], "w", encoding="utf-8") as out:
@@ -2352,6 +2392,8 @@ rule skip_reasons:
             category="Run metadata",
             subcategory="Skip reasons",
         )
+    benchmark:
+        bench("{isolate}", "skip_reasons")
     run:
         iso = wildcards.isolate
         mode = RUN_MODE[iso]
@@ -2489,6 +2531,8 @@ rule racon_seed:
         stage_racon0("{isolate}")
     params:
         outdir=lambda wc: work_racon_dir(wc.isolate)
+    benchmark:
+        bench("{isolate}", "racon_seed")
     shell:
         r"""
         set -euo pipefail
@@ -2735,6 +2779,8 @@ rule polish_execution:
         source=lambda wc: final_source_for(wc.isolate),
         helper_sha=sha256_file(SUPPORT_FILE)
     message: "Record executed polishing stages: {wildcards.isolate}"
+    benchmark:
+        bench("{isolate}", "polish_execution")
     run:
         iso = wildcards.isolate
         planned = planned_stages(iso)
@@ -2779,6 +2825,8 @@ rule final_copy:
         outdir=lambda wc: work_final_dir(wc.isolate)
     log: os.path.join(logs_dir("{isolate}"), "final_copy.log")
     message: "Promote validated final assembly: {wildcards.isolate}"
+    benchmark:
+        bench("{isolate}", "final_copy")
     shell:
         r"""
         mkdir -p "{params.outdir}" "$(dirname "{log}")"
@@ -2908,6 +2956,8 @@ rule seqkit_stats:
     threads: 1
     message:
         logmsg(20, "seqkit summaries")
+    benchmark:
+        bench("{isolate}", "seqkit_stats")
     shell:
         r"""
         mkdir -p "$(dirname "{log}")"
@@ -2961,6 +3011,8 @@ rule coverage_estimate:
     threads: 1
     message:
         logmsg(21, "ONT coverage estimate")
+    benchmark:
+        bench("{isolate}", "coverage_estimate")
     shell:
         r"""
         mkdir -p "$(dirname "{log}")"
@@ -3089,6 +3141,8 @@ rule tool_versions:
             category="Run metadata",
             subcategory="Tool versions",
         )
+    benchmark:
+        bench("{isolate}", "tool_versions")
     run:
         iso = wildcards.isolate
         os.makedirs(metadata_dir(iso), exist_ok=True)
@@ -3173,6 +3227,8 @@ rule checksums:
             category="Run metadata",
             subcategory="Checksums",
         )
+    benchmark:
+        bench("{isolate}", "checksums")
     run:
         os.makedirs(metadata_dir(wildcards.isolate), exist_ok=True)
 
@@ -3230,6 +3286,8 @@ rule run_summary:
     output:
         tsv=report(run_summary_tsv("{isolate}"), caption="workflow/report/run_summary_tsv.rst", category="Run metadata", subcategory="TSV"),
         json=report(run_summary_json("{isolate}"), caption="workflow/report/run_summary_json.rst", category="Run metadata", subcategory="JSON")
+    benchmark:
+        bench("{isolate}", "run_summary")
     run:
         import subprocess
 
@@ -3556,6 +3614,8 @@ rule qc_assessment:
             category="Run metadata",
             subcategory="QC assessment",
         )
+    benchmark:
+        bench("{isolate}", "qc_assessment")
     run:
         iso = wildcards.isolate
         os.makedirs(metadata_dir(iso), exist_ok=True)
@@ -3655,6 +3715,8 @@ rule multiqc_custom_content:
         versions=tool_versions_tsv("{isolate}")
     output:
         multiqc_custom_tsv("{isolate}")
+    benchmark:
+        bench("{isolate}", "multiqc_custom_content")
     run:
         iso = wildcards.isolate
         os.makedirs(metadata_dir(iso), exist_ok=True)
@@ -3776,3 +3838,24 @@ rule multiqc_custom_content:
 ###############################################################################
 
 ruleorder: final_copy > unicycler
+
+# Computational records are independent of scientific outputs and survive failures.
+rule computational_report:
+    output:
+        report(os.path.join(provenance_runtime_dir(), "computational_report.html"),
+               caption="workflow/report/computational.rst", category="Computational performance")
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "computational_report.tsv")
+    run:
+        render_report(provenance_runtime_dir())
+
+COMPUTATIONAL_RECORDER = install_recorder(
+    workflow, BASE_DIR, os.path.join(SOURCE_ROOT, "Hybas.smk"), EFFECTIVE_CONFIG, SAMPLES)
+
+onsuccess:
+    if COMPUTATIONAL_RECORDER is not None:
+        COMPUTATIONAL_RECORDER.finish("success")
+
+onerror:
+    if COMPUTATIONAL_RECORDER is not None:
+        COMPUTATIONAL_RECORDER.finish("failed")

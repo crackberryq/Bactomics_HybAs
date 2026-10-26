@@ -1,10 +1,18 @@
 # Changelog
 
+## v10 development — computational records
+
+- Enable extended native benchmarks for every concrete rule, including QC and provenance stages that previously had no benchmarks.
+- Persist a separate computational record for each execution invocation, including hardware/runner details, requested resources, UTC timestamps, job attempts, available resource measurements and raw benchmark archives.
+- Preserve failures, retries, resumes and no-work invocations; never reuse an old benchmark as a new measurement. Missing metrics remain null/NA.
+- Include the computational history in Snakemake reports and provide JSON/TSV exports. Run elapsed time is separate from summed CPU time and the largest individual job RSS peak.
+- Bactologix 0.1.0a17 automatic release-specific runner preparation is now published.
+
 ## v10 development — runner compatibility
 
 - Pin the development runner and regression CI to Snakemake 9.27.1, retaining Python 3.11 in the Conda recipe.
 - Accept newer Snakemake resource objects in the existing memory-budget check, retaining the earlier scalar representation and the same reservation limits.
-- Document release-specific automatic runner preparation in the proposed Bactologix 0.1.0a17 update. New multi-platform manifests remain metadata-only until their execution adapters are qualified.
+- Document release-specific automatic runner preparation in Bactologix 0.1.0a17. New multi-platform manifests remain metadata-only until their execution adapters are qualified.
 
 ## Unreleased — package layout only
 
