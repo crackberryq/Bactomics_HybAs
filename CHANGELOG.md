@@ -1,5 +1,11 @@
 # Changelog
 
+## v10 development — runner compatibility
+
+- Pin the development runner and regression CI to Snakemake 9.27.1, retaining Python 3.11 in the Conda recipe.
+- Accept newer Snakemake resource objects in the existing memory-budget check, retaining the earlier scalar representation and the same reservation limits.
+- Document release-specific automatic runner preparation in the proposed Bactologix 0.1.0a17 update. New multi-platform manifests remain metadata-only until their execution adapters are qualified.
+
 ## Unreleased — package layout only
 
 - Group rule environments, report captions, helper code, scripts and MultiQC configuration under `workflow/`.

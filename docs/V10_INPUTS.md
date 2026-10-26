@@ -1,8 +1,9 @@
 # HybAs 10 development: input metadata foundation
 
-Status: **development preview, manifest validation only**. The executable
-workflow remains HybAs 9.0.0-AWARE. This change does not implement a new
-assembler, change any AWARE decision, or connect these manifests to `Hybas.smk`.
+Status: **development preview, manifest validation only**. The scientific
+routes remain the HybAs 9.0.0-AWARE baseline, with Snakemake 9.27.1 pinned for
+this development branch. This change does not implement a new assembler,
+change any AWARE decision, or connect these manifests to `Hybas.smk`.
 The Research Report continues independently in PR #3.
 
 ## What works now
@@ -100,7 +101,7 @@ not the sequence files. Input declaration order is retained.
 ## Assembly/polishing design matrix — not executable
 
 These are candidate integration directions, not tested v10 tool selections.
-No new dependency versions or commands are introduced in this milestone.
+No new scientific tool versions or assembler commands are introduced in this milestone.
 
 | Mode | Assembly direction | Polishing direction / open decision |
 |---|---|---|
@@ -135,6 +136,24 @@ that any candidate has been qualified here.
 5. **Release integration:** report/UI controls, capability-gated execution,
    migration documentation and a release from the tested commit.
 
-The existing v9 configuration, Snakefile, dependencies and AWARE policy are
-unchanged. Python 3.11/3.12 CI already discovers the new tests through
-`python -m pytest tests -q`. Metadata fixtures contain no sequence data.
+## Runner installation and compatibility
+
+This branch's `environment.yaml` pins Python 3.11 and Snakemake 9.27.1. CI uses
+that same Snakemake release on Python 3.11/3.12. A two-line compatibility change
+unwraps Snakemake's newer `Resource.value` object in the memory-budget check;
+it also accepts the scalar resource values used by 9.6.2. Reservation values,
+AWARE decisions, scientific routes and rule environment recipes are unchanged.
+
+The full local software suite passes 184 tests on 9.27.1 using the documented
+container benchmark workaround; 13 existing DAG/budget checks also pass on
+9.6.2. Native Conda installation and normal benchmarking remain CI checks.
+
+Bactologix 0.1.0a17's proposed installer reads the selected release's environment
+file, installs/checks that release's runner, then activates it. Different
+requirements use a separate environment. Older runners and cached rule
+environments are retained. No global "install latest Snakemake" operation is
+used. The unfinished v10 source remains outside Bactologix's reviewed execution
+catalogue until adapter integration and qualification are complete.
+
+The production v9 branch remains unchanged. Metadata fixtures contain no
+sequence data, and mocked workflow tests do not establish biological accuracy.

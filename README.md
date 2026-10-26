@@ -5,8 +5,9 @@
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)
-adds standalone metadata validation for the proposed sequencing modes. It does
-not yet enable new assembly routes; the executable workflow below remains v9.
+adds standalone metadata validation for the proposed sequencing modes. This
+development branch pins Snakemake 9.27.1 and retains the existing v9 scientific
+routes; the new multi-platform assembly adapters are not yet enabled.
 
 HybAs is a native Snakemake workflow for hybrid, Illumina-only and ONT-only bacterial assembly, with taxon-aware read handling, optional polishing, QC and provenance. Run `Hybas.smk` directly. Snakemake creates and activates the rule environments; there is no HybAs Python package to install.
 
@@ -28,7 +29,7 @@ cp examples/samples.example.tsv samples.tsv
 snakemake -s Hybas.smk setup_envs --use-conda --cores 4 --config setup_only=true
 ```
 
-`environment.yaml` provides Python 3.11, Snakemake 9.6.2 and YAML support. Rule environments are in `workflow/envs/`. Their post-deployment checks fail if required executables are missing or resolve outside the managed environment. Optional Medaka, Polypolish and annotation environments are selected only when needed by the run (or requested during setup).
+`environment.yaml` on this development branch provides Python 3.11, Snakemake 9.27.1 and YAML support. The production v9 branch still pins its original runner. Rule environments are in `workflow/envs/`. Their post-deployment checks fail if required executables are missing or resolve outside the managed environment. Optional Medaka, Polypolish and annotation environments are selected only when needed by the run (or requested during setup).
 
 An existing environment can be updated with `conda env update -n hybas -f environment.yaml`. Keep your workstation configuration and sample sheet when upgrading; compare them with the new examples instead of overwriting them.
 

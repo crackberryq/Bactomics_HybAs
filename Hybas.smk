@@ -1247,6 +1247,8 @@ if not SETUP_ONLY and not ADMIN_MODE:
         }
 
     budget = workflow.global_resources.get("mem_mb")
+    # Newer Snakemake exposes Resource objects; older releases use scalars.
+    budget = getattr(budget, "value", budget)
     reservations = {"assembly": ASSEMBLY_MEM_MB}
     if KRAKEN_PROFILE_ENABLED: reservations["kraken"] = KRAKEN_MEM_MB
     if any(planned_stages(i) for i in SAMPLES): reservations["polishing"] = POLISH_MEM_MB
