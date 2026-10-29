@@ -1,5 +1,13 @@
 # Changelog
 
+## HybAs AWARE 10.0.0a1 — unreleased alpha target
+
+- Adopt BaSIS-style product names, numeric prerelease versions, `v<version>`
+  tags and version-specific release documents for future updates.
+- Record completed work, pending Auto settings/execution integration and
+  release gates in `docs/RELEASE_10.0.0a1.md`. This documentation update does
+  not publish a release or change the v9 runtime/configuration contract.
+
 ## v10 development — computational records
 
 - Enable extended native benchmarks for every concrete rule, including QC and provenance stages that previously had no benchmarks.

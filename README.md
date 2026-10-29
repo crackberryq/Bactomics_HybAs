@@ -1,8 +1,12 @@
-# HybAs 9.0.0-AWARE
+# HybAs AWARE
 
 [![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
+
+**Development target: 10.0.0a1 — Alpha (unreleased).** See the
+[release status](docs/RELEASE_10.0.0a1.md) and
+[BaSIS-aligned update conventions](docs/RELEASE_CONVENTIONS.md).
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)
 adds standalone metadata validation for the proposed sequencing modes. This
@@ -11,7 +15,7 @@ routes; the new multi-platform assembly adapters are not yet enabled.
 
 HybAs is a native Snakemake workflow for hybrid, Illumina-only and ONT-only bacterial assembly, with taxon-aware read handling, optional polishing, QC and provenance. Run `Hybas.smk` directly. Snakemake creates and activates the rule environments; there is no HybAs Python package to install.
 
-This release fixes execution and reporting defects in the v8.8 source (`b14ff7688b72f1ae4a39bd99a4305d16a0e53ec1`). See [CHANGELOG.md](CHANGELOG.md) for behavior changes and validation limits. Preserve the old checkout and outputs when comparing versions.
+The v9 baseline fixes execution and reporting defects in the v8.8 source (`b14ff7688b72f1ae4a39bd99a4305d16a0e53ec1`). The usage guide below describes those existing routes. See [CHANGELOG.md](CHANGELOG.md) for behavior changes and validation limits. Preserve the old checkout and outputs when comparing versions.
 
 ## Install
 

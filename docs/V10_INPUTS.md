@@ -1,4 +1,7 @@
-# HybAs 10 development: input metadata foundation
+# HybAs AWARE 10.0.0a1 development: input metadata foundation
+
+This is part of the [unreleased alpha target](RELEASE_10.0.0a1.md). Future
+updates follow the [BaSIS-aligned release conventions](RELEASE_CONVENTIONS.md).
 
 Status: **development preview, manifest validation only**. The scientific
 routes remain the HybAs 9.0.0-AWARE baseline, with Snakemake 9.27.1 pinned for
