@@ -81,7 +81,7 @@ elif tool == 'unicycler':
     write(Path(arg('-o'))/'assembly.fasta','>fixture\n'+'A'*1200+'\n')
 elif tool == 'spades.py':
     dataset=json.loads(Path(arg('--dataset')).read_text())
-    assert dataset and '-m' in args and '-t' in args
+    assert dataset and '-m' in args and '-t' in args and arg('--phred-offset') == '33'
     names=set()
     for lib in dataset:
         assert lib['type']=='paired-end' and lib['orientation']=='fr'

@@ -34,7 +34,7 @@ def main():
                             'left reads': [str(r1)], 'right reads': [str(r2)]})
         source = root / 'dataset.yaml'; source.write_text(json.dumps(dataset))
         subprocess.run(['spades.py', '--dataset', str(source), '-o', str(root / 'assembly'),
-                        '-t', '2', '-m', '2'], check=True)
+                        '-t', '2', '-m', '2', '--phred-offset', '33'], check=True)
         promote(root / 'assembly/contigs.fasta', root / 'stage_spades.fasta', 1000)
         assert (root / 'stage_spades.fasta').stat().st_size > 1000
         print('Native multi-library dataset and contig promotion contracts passed')

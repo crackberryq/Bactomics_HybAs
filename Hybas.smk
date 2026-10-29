@@ -1918,7 +1918,7 @@ rule spades_libraries:
           set -euo pipefail
           tempdir=$(mktemp -d "{params.parent}/.spades.XXXXXX")
           echo "SPAdes work directory: $tempdir"
-          spades.py --dataset "{input.libraries}/dataset.yaml" -o "$tempdir" -t {threads} -m {params.memory_gb}
+          spades.py --dataset "{input.libraries}/dataset.yaml" -o "$tempdir" -t {threads} -m {params.memory_gb} --phred-offset 33
           mv "$tempdir" "{output.bundle}"
           python {input.adapter:q} promote "{output.bundle}/contigs.fasta" {output.snapshot:q} {params.minimum}
         ) > {log:q} 2>&1

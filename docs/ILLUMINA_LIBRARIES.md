@@ -18,7 +18,9 @@ not qualification of assembly accuracy. It belongs to draft PR #4 and the
 Legacy folder/sample-sheet runs continue to use the existing Unicycler path.
 Do not put independent preparations into a legacy raw folder and assume their
 library boundaries will be inferred. This adapter requires explicit metadata.
-All libraries must be ordinary paired-end genomic DNA inputs. A preparation kit
+All libraries must be ordinary paired-end genomic DNA inputs using Phred+33
+quality scores. Legacy Phred+64 input needs conversion outside this adapter;
+quality encoding is not inferred from filenames or uniformly high scores. A preparation kit
 name does not automatically select MDA, RNA, UMI, linked-read or other special
 processing; those protocols are outside this adapter's contract.
 
@@ -67,6 +69,7 @@ assembler override or arbitrary extra flags are introduced.
 5. Pass each trimmed library as a separate paired-end/FR SPAdes dataset entry.
    Declared insert sizes are retained and used for ordering; SPAdes estimates
    insert distributions. No unsupported insert-size dataset field is invented.
+   SPAdes receives explicit `--phred-offset 33`, matching fastp's output encoding.
    This is standard SPAdes execution, without automatic special-purpose modes.
 6. Promote `contigs.fasta` through `min_fasta_length` to `stage_spades.fasta`.
    Existing optional short-read polishing and downstream QC/reporting consume

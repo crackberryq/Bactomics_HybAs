@@ -1,9 +1,9 @@
 name: Native environment checks
 on:
   push:
-    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml']
+    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml', 'tests/native_library_smoke.py']
   pull_request:
-    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml']
+    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml', 'tests/native_library_smoke.py']
   workflow_dispatch:
 permissions:
   contents: read
