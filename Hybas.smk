@@ -58,6 +58,8 @@ from workflow_support import (VERSION, normalize_taxid, manual_taxid, validate_i
 from datetime import datetime
 from computational import install_recorder, render_report
 from settings import SettingsResolution, resource_value
+from input_manifest import load_manifest
+from library_inputs import execution_samples
 from snakemake.io import report, directory, touch
 
 def as_bool(x):
@@ -93,6 +95,11 @@ if workflow.is_main_process:
 
 BASE_DIR                 = os.path.abspath(os.path.expanduser(config.get("base_dir", ".")))
 SAMPLE_SHEET             = config.get("sample_sheet", "")
+INPUT_MANIFEST = load_manifest(os.path.expanduser(config["input_manifest"])) if config.get("input_manifest") else None
+LIBRARY_SAMPLES = execution_samples(INPUT_MANIFEST) if INPUT_MANIFEST else {}
+if INPUT_MANIFEST and INPUT_MANIFEST["source"]["sha256"] != SETTINGS.record["request_context"]["input_manifest_sha256"]:
+    raise ValueError("Input manifest changed during configuration; retry with a stable manifest")
+LIBRARY_ADAPTER = os.path.join(SOURCE_ROOT, "workflow", "lib", "library_inputs.py")
 THREADS                  = int(config.get("threads", 8))
 KEEP_PERCENT             = int(config.get("keep_percent", 95))
 RACON_ROUNDS             = int(config.get("racon_rounds", 2))
@@ -190,8 +197,8 @@ if KRAKEN_DECISION_MODE in {"manual", "auto", "aware"} and not RUN_KRAKEN:
         "Set run_kraken=true or switch kraken_decision_mode='off'."
     )
     
-if not SETUP_ONLY and not ADMIN_MODE and not SAMPLE_SHEET and "isolate" not in config:
-    raise ValueError("Provide sample_sheet or legacy isolate in config.yaml")
+if not SETUP_ONLY and not ADMIN_MODE and not SAMPLE_SHEET and not LIBRARY_SAMPLES and "isolate" not in config:
+    raise ValueError("Provide input_manifest, sample_sheet or legacy isolate in config.yaml")
 
 ###############################################################################
 # SECTION 2 — DATABASE HELPERS
@@ -235,12 +242,15 @@ def read_sample_sheet(path):
             })
     return rows
 
-if (SETUP_ONLY or ADMIN_MODE) and (not SAMPLE_SHEET or not os.path.exists(SAMPLE_SHEET)):
+if (SETUP_ONLY or ADMIN_MODE) and not LIBRARY_SAMPLES and (not SAMPLE_SHEET or not os.path.exists(SAMPLE_SHEET)):
     SAMPLE_ROWS = []
 elif SAMPLE_SHEET:
     if not os.path.exists(SAMPLE_SHEET):
         raise ValueError(f"sample_sheet not found: {SAMPLE_SHEET}")
     SAMPLE_ROWS = read_sample_sheet(SAMPLE_SHEET)
+elif LIBRARY_SAMPLES:
+    SAMPLE_ROWS = [{"isolate": name, "target_taxid": "", "busco_lineage": "", "medaka_model": ""}
+                   for name in LIBRARY_SAMPLES]
 else:
     SAMPLE_ROWS = [{
         "isolate": str(config["isolate"]).strip(),
@@ -255,6 +265,10 @@ if not SAMPLE_ROWS and not (SETUP_ONLY or ADMIN_MODE):
 SAMPLES = [r["isolate"] for r in SAMPLE_ROWS]
 validate_isolate_names(SAMPLES)
 SAMPLE_INFO = {r["isolate"]: r for r in SAMPLE_ROWS}
+if LIBRARY_SAMPLES and set(SAMPLES) != set(LIBRARY_SAMPLES):
+    raise ValueError("sample_sheet and input_manifest must contain exactly the same sample IDs; no samples will be omitted")
+LIBRARY_PATTERN = "(?:" + "|".join(re.escape(i) for i in LIBRARY_SAMPLES) + ")" if LIBRARY_SAMPLES else r"(?!)"
+LEGACY_PATTERN = "(?:" + "|".join(re.escape(i) for i in SAMPLES if i not in LIBRARY_SAMPLES) + ")" if set(SAMPLES) - set(LIBRARY_SAMPLES) else r"(?!)"
 
 ###############################################################################
 # SECTION 4 — PATH HELPERS
@@ -313,6 +327,11 @@ def filt_ont(i): return os.path.join(work_inputs_filtered_dir(i), "ont_filtered.
 def unicycler_outdir(i): return os.path.join(work_assembly_dir(i), "unicycler")
 def unicycler_asm(i): return os.path.join(unicycler_outdir(i), "assembly.fasta")
 def stage_unicycler(i): return os.path.join(work_assembly_dir(i), "stage_unicycler.fasta")
+def library_audit(i): return os.path.join(work_inputs_merged_dir(i), "library_identity")
+def library_trimmed(i): return os.path.join(trimmed_dir(i), "libraries")
+def spades_outdir(i): return os.path.join(work_assembly_dir(i), "spades_libraries")
+def stage_spades(i): return os.path.join(work_assembly_dir(i), "stage_spades.fasta")
+def base_stage(i): return "spades" if i in LIBRARY_SAMPLES else "unicycler"
 
 def stage_racon0(i): return os.path.join(work_racon_dir(i), "stage_racon0.fasta")
 def stage_racon(i, n): return os.path.join(work_racon_dir(i), f"stage_racon{n}.fasta")
@@ -1074,6 +1093,7 @@ def needs_polypolish(i):
 
 def stage_path(i, stage):
     if stage == "unicycler": return stage_unicycler(i)
+    if stage == "spades": return stage_spades(i)
     if stage == "medaka": return stage_medaka(i)
     if stage == "polypolish": return stage_polypolish(i)
     if re.fullmatch(r"racon[0-9]+", stage): return stage_racon(i, int(stage[5:]))
@@ -1081,7 +1101,7 @@ def stage_path(i, stage):
 
 def polishing_source(i):
     stages = [x for x in planned_stages(i) if x != "polypolish"]
-    return stage_path(i, stages[-1] if stages else "unicycler")
+    return stage_path(i, stages[-1] if stages else base_stage(i))
 
 def polish_status(i): return os.path.join(metadata_dir(i), "polypolish_status.json")
 def polish_execution(i): return os.path.join(metadata_dir(i), "polish_execution.json")
@@ -1090,6 +1110,7 @@ def alignment_count(i): return os.path.join(metadata_dir(i), "illumina_alignment
 
 def enabled_envs():
     names = ["assembly", "qc"]
+    if LIBRARY_SAMPLES: names.append("library_assembly")
     if (SETUP_ONLY and POLISH_MODE == "tripolish" and RUN_POLYPOLISH) or any(needs_polypolish(i) for i in SAMPLES): names.append("polishing")
     if (SETUP_ONLY and POLISH_MODE in {"medaka", "tripolish"}) or any("medaka" in planned_stages(i) for i in SAMPLES): names.append("medaka")
     if RUN_PROKKA: names.append("annotation")
@@ -1120,10 +1141,11 @@ KRAKEN_MEM_MB = rule_memory("kraken", max(1024, int(sum(
 POLISH_MEM_MB = rule_memory("polishing", 4096)
 DB_CORE = [os.path.join(KRAKEN_DB_DIR, f) for f in ("hash.k2d", "opts.k2d", "taxo.k2d")]
 CONFIG_FILES = [os.path.abspath(x) for x in list(workflow.configfiles) if os.path.isfile(x)]
-SAMPLE_FILES = [SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) else []
+SAMPLE_FILES = ([SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) else []) + ([INPUT_MANIFEST["source"]["manifest_path"]] if INPUT_MANIFEST else [])
 SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow", "lib", "workflow_support.py")
 SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE,
-                os.path.join(SOURCE_ROOT, "workflow", "lib", "settings.py")]
+                os.path.join(SOURCE_ROOT, "workflow", "lib", "settings.py"), LIBRARY_ADAPTER,
+                os.path.join(SOURCE_ROOT, "workflow", "lib", "input_manifest.py")]
 EFFECTIVE_CONFIG = json.dumps(config, sort_keys=True, default=str)
 AWARE_SETTINGS = {k: v for k, v in globals().copy().items() if k.startswith("KRAKEN_") and isinstance(v, (str, bool, int, float))}
 # Explicitly fingerprint only controller source so report-only edits do not rerun classification.
@@ -1193,19 +1215,25 @@ rule all:
 ###############################################################################
 
 def illumina_r1_files(i):
+    if i in LIBRARY_SAMPLES:
+        return [g["r1"] for lib in LIBRARY_SAMPLES[i]["libraries"] for g in lib["read_groups"]]
     d = raw_illumina_dir(i)
     pats = ["*_R1*.fastq.gz", "*_R1*.fq.gz", "*_R1*.fastq", "*_R1*.fq"]
     return sorted(sum((glob.glob(os.path.join(d, p)) for p in pats), []))
 
 def illumina_r2_files(i):
+    if i in LIBRARY_SAMPLES:
+        return [g["r2"] for lib in LIBRARY_SAMPLES[i]["libraries"] for g in lib["read_groups"]]
     d = raw_illumina_dir(i)
     pats = ["*_R2*.fastq.gz", "*_R2*.fq.gz", "*_R2*.fastq", "*_R2*.fq"]
     return sorted(sum((glob.glob(os.path.join(d, p)) for p in pats), []))
 
 def paired_illumina_files(i):
+    if i in LIBRARY_SAMPLES: return illumina_r1_files(i), illumina_r2_files(i)
     return pair_illumina_files(illumina_r1_files(i), illumina_r2_files(i))
 
 def nanopore_files(i):
+    if i in LIBRARY_SAMPLES: return []
     d = raw_nanopore_dir(i)
     pats = ["*.fastq.gz", "*.fq.gz", "*.fastq", "*.fq"]
     return sorted(sum((glob.glob(os.path.join(d, p)) for p in pats), []))
@@ -1224,7 +1252,7 @@ if not SETUP_ONLY and not ADMIN_MODE:
     for iso in SAMPLES:
         r1 = illumina_r1_files(iso)
         r2 = illumina_r2_files(iso)
-        r1, r2 = pair_illumina_files(r1, r2)
+        r1, r2 = paired_illumina_files(iso)
         validate_input_files(r1 + r2 + nanopore_files(iso))
         ont = nanopore_files(iso)
         has_illumina = len(r1) > 0 and len(r2) > 0
@@ -1305,6 +1333,7 @@ SETTINGS.set_sample_plans({iso: {
         "Detected input layout" if config["run_mode"] == "auto" else "Explicit mode verified against inputs"),
     "inputs": [os.path.abspath(p) for p in illumina_r1_files(iso) + illumina_r2_files(iso) + nanopore_files(iso)],
     "overrides": ISO_OVERRIDES[iso], "polish_mode": POLISH_MODE,
+    **({"library_plan": LIBRARY_SAMPLES[iso], "assembler": "spades"} if iso in LIBRARY_SAMPLES else {}),
     "planned_polishing_stages": planned_stages(iso),
     "modules": {"kraken": KRAKEN_PROFILE_ENABLED, "busco": RUN_BUSCO,
                 "prokka": RUN_PROKKA, "multiqc": RUN_MULTIQC,
@@ -1458,6 +1487,31 @@ rule capture_env_assembly_global:
         "Capturing assembly environment manifest"
     benchmark:
         os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_assembly_global.tsv")
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p "{params.outdir}"
+        conda list > "{output[0]}"
+        conda env export --no-builds > "{output[1]}"
+        conda list --explicit > "{output[2]}"
+        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -V > "{output[4]}" 2>&1
+        """
+
+rule capture_env_library_assembly_global:
+    output:
+        env_conda_list_global("library_assembly"),
+        env_export_global("library_assembly"),
+        env_explicit_global("library_assembly"),
+        env_pip_freeze_global("library_assembly"),
+        env_python_version_global("library_assembly")
+    params:
+        outdir=provenance_conda_dir()
+    conda: "workflow/envs/library_assembly.yml"
+    message:
+        "Capturing library_assembly environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_library_assembly_global.tsv")
     shell:
         r"""
         set -euo pipefail
@@ -1788,7 +1842,91 @@ rule workflow_provenance:
 # SECTION 11 — RAW MERGING
 ###############################################################################
 
+
+rule merge_illumina_libraries:
+    wildcard_constraints:
+        isolate=LIBRARY_PATTERN
+    input:
+        r1=lambda wc: illumina_r1_files(wc.isolate),
+        r2=lambda wc: illumina_r2_files(wc.isolate),
+        adapter=LIBRARY_ADAPTER
+    output:
+        r1=merged_r1("{isolate}"), r2=merged_r2("{isolate}"),
+        audit=directory(library_audit("{isolate}"))
+    params:
+        plan=lambda wc: json.dumps(LIBRARY_SAMPLES[wc.isolate], sort_keys=True),
+        outdir=lambda wc: work_inputs_merged_dir(wc.isolate)
+    log: os.path.join(logs_dir("{isolate}"), "merge_illumina_libraries.log")
+    benchmark: bench("{isolate}", "merge_illumina_libraries")
+    conda: "workflow/envs/assembly.yml"
+    threads: 1
+    message: "Audit read pairs and preserve library identities: {wildcards.isolate}"
+    shell:
+        r"""
+        mkdir -p "{params.outdir}" "$(dirname "{log}")"
+        python {input.adapter:q} prepare --plan {params.plan:q} --r1 {output.r1:q} --r2 {output.r2:q} --audit {output.audit:q} > {log:q} 2>&1
+        """
+
+rule fastp_libraries:
+    wildcard_constraints:
+        isolate=LIBRARY_PATTERN
+    input:
+        r1=clean_r1("{isolate}"), r2=clean_r2("{isolate}"),
+        audit=library_audit("{isolate}"), adapter=LIBRARY_ADAPTER
+    output:
+        r1=trim_r1("{isolate}"), r2=trim_r2("{isolate}"),
+        html=report(os.path.join(fastp_dir("{isolate}"), "fastp.html"), caption="workflow/report/library_fastp.rst", category="QC", subcategory="Library trimming"),
+        json=report(os.path.join(fastp_dir("{isolate}"), "fastp.json"), caption="workflow/report/library_fastp.rst", category="QC", subcategory="Library trimming"),
+        libraries=directory(library_trimmed("{isolate}"))
+    params:
+        trimdir=lambda wc: trimmed_dir(wc.isolate),
+        reportdir=lambda wc: fastp_dir(wc.isolate)
+    log: os.path.join(logs_dir("{isolate}"), "fastp_libraries.log")
+    benchmark: bench("{isolate}", "fastp_libraries")
+    conda: "workflow/envs/assembly.yml"
+    threads: THREADS
+    message: "Trim each Illumina library separately: {wildcards.isolate}"
+    shell:
+        r"""
+        mkdir -p "{params.trimdir}" "{params.reportdir}" "$(dirname "{log}")"
+        python {input.adapter:q} trim --plan "{input.audit}/plan.json" --r1 {input.r1:q} --r2 {input.r2:q} \
+          --outdir {output.libraries:q} --combined1 {output.r1:q} --combined2 {output.r2:q} \
+          --report-html {output.html:q} --report-json {output.json:q} --threads {threads} > {log:q} 2>&1
+        """
+
+rule spades_libraries:
+    wildcard_constraints:
+        isolate=LIBRARY_PATTERN
+    input:
+        libraries=library_trimmed("{isolate}"), adapter=LIBRARY_ADAPTER
+    output:
+        bundle=directory(spades_outdir("{isolate}")), snapshot=stage_spades("{isolate}")
+    params:
+        parent=lambda wc: work_assembly_dir(wc.isolate),
+        memory_gb=SPADES_MEMORY_GB, minimum=MIN_FASTA_LENGTH
+    log: os.path.join(logs_dir("{isolate}"), "spades_libraries.log")
+    benchmark: bench("{isolate}", "spades_libraries")
+    conda: "workflow/envs/library_assembly.yml"
+    resources:
+        mem_mb=ASSEMBLY_MEM_MB
+    threads: THREADS
+    message: "SPAdes assembly with separate paired-end libraries: {wildcards.isolate}"
+    shell:
+        r"""
+        mkdir -p "{params.parent}" "$(dirname "{log}")"
+        (
+          set -euo pipefail
+          tempdir=$(mktemp -d "{params.parent}/.spades.XXXXXX")
+          echo "SPAdes work directory: $tempdir"
+          spades.py --dataset "{input.libraries}/dataset.yaml" -o "$tempdir" -t {threads} -m {params.memory_gb}
+          mv "$tempdir" "{output.bundle}"
+          python {input.adapter:q} promote "{output.bundle}/contigs.fasta" {output.snapshot:q} {params.minimum}
+        ) > {log:q} 2>&1
+        """
+
 rule merge_illumina:
+    wildcard_constraints:
+        isolate=LEGACY_PATTERN
     input:
         r1=lambda wc: paired_illumina_files(wc.isolate)[0],
         r2=lambda wc: paired_illumina_files(wc.isolate)[1]
@@ -2278,6 +2416,8 @@ rule clean_ont:
 ###############################################################################
 
 rule fastp_trim:
+    wildcard_constraints:
+        isolate=LEGACY_PATTERN
     input:
         r1=clean_r1("{isolate}"),
         r2=clean_r2("{isolate}")
@@ -2513,6 +2653,8 @@ rule skip_reasons:
 ###############################################################################
 
 rule unicycler:
+    wildcard_constraints:
+        isolate=LEGACY_PATTERN
     input:
         ont=filt_ont("{isolate}"),
         r1=trim_r1("{isolate}"),
@@ -2809,7 +2951,7 @@ rule polypolish:
 
 rule polish_execution:
     input:
-        assemblies=lambda wc: [stage_path(wc.isolate, x) for x in ["unicycler"] + planned_stages(wc.isolate)],
+        assemblies=lambda wc: [stage_path(wc.isolate, x) for x in [base_stage(wc.isolate)] + planned_stages(wc.isolate)],
         polypolish_status=lambda wc: [polish_status(wc.isolate)] if needs_polypolish(wc.isolate) else []
     output: polish_execution("{isolate}")
     params:
@@ -2837,8 +2979,8 @@ rule polish_execution:
                 executed.remove("polypolish")
                 skipped["polypolish"] = pp["reason"]
         stages = [{"stage": name, "path": path, **require_fasta(path)}
-                  for name, path in zip(["unicycler"] + planned, input.assemblies)]
-        final_stage = executed[-1] if executed else "unicycler"
+                  for name, path in zip([base_stage(iso)] + planned, input.assemblies)]
+        final_stage = executed[-1] if executed else base_stage(iso)
         write_json(output[0], {"schema": "hybas-polishing-v1", "workflow_version": VERSION,
             "requested_polish_mode": POLISH_MODE, "run_mode": RUN_MODE[iso],
             "planned_stages": planned, "executed_stages": executed, "skipped_stages": skipped,
@@ -2853,7 +2995,7 @@ rule polish_execution:
 
 def final_source_for(i):
     stages = planned_stages(i)
-    return stage_path(i, stages[-1] if stages else "unicycler")
+    return stage_path(i, stages[-1] if stages else base_stage(i))
 
 rule final_copy:
     input:
@@ -3169,6 +3311,7 @@ rule prokka:
 rule tool_versions:
     input:
         assembly_list=lambda wc: active_env_list("assembly"),
+        library_list=lambda wc: active_env_list("library_assembly") if wc.isolate in LIBRARY_SAMPLES else [],
         qc_list=lambda wc: active_env_list("qc"),
         polishing_list=lambda wc: active_env_list("polishing"),
         medaka_list=lambda wc: active_env_list("medaka"),
@@ -3216,6 +3359,7 @@ rule tool_versions:
             "snakemake": __import__("importlib.metadata", fromlist=["version"]).version("snakemake"),
 
             "unicycler": parse_conda_list_version(input.assembly_list, "unicycler"),
+            "spades": parse_conda_list_version(input.library_list if iso in LIBRARY_SAMPLES else input.assembly_list, "spades"),
             "racon": parse_conda_list_version(input.assembly_list, "racon"),
             "minimap2": parse_conda_list_version(input.assembly_list, "minimap2"),
             "filtlong": parse_conda_list_version(input.assembly_list, "filtlong"),
@@ -3590,6 +3734,10 @@ rule run_summary:
 
             "kraken_illumina_report_present": os.path.exists(input.kr_illumina),
             "kraken_ont_report_present": os.path.exists(input.kr_ont),
+            "assembler": base_stage(iso),
+            "input_strategy": LIBRARY_SAMPLES[iso]["selection"]["selected_mode"] if iso in LIBRARY_SAMPLES else RUN_MODE[iso],
+            "library_count": len(LIBRARY_SAMPLES[iso]["libraries"]) if iso in LIBRARY_SAMPLES else None,
+            "tool_spades_version": parse_tool_version(input.tools, "spades"),
             "fastp_html_present": os.path.exists(input.fastp_html),
             "fastp_json_present": os.path.exists(input.fastp_json),
 
@@ -3809,6 +3957,7 @@ rule multiqc_custom_content:
                 "qc_overall\t"
                 "qc_contiguity\t"
                 "qc_coverage\t"
+                "assembler\tinput_strategy\tlibrary_count\ttool_spades\t"
                 "tool_unicycler\t"
                 "tool_racon\t"
                 "tool_medaka\t"
@@ -3855,6 +4004,7 @@ rule multiqc_custom_content:
                 f"{qc_map.get('overall_qc_status', {}).get('status', 'NA')}\t"
                 f"{qc_map.get('assembly_contiguity', {}).get('status', 'NA')}\t"
                 f"{qc_map.get('ont_coverage', {}).get('status', 'NA')}\t"
+                f"{s.get('assembler', 'NA')}\t{s.get('input_strategy', 'NA')}\t{s.get('library_count', 'NA')}\t{version_map.get('spades', 'NA')}\t"
                 f"{version_map.get('unicycler', 'NA')}\t"
                 f"{version_map.get('racon', 'NA')}\t"
                 f"{version_map.get('medaka', 'NA')}\t"

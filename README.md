@@ -9,9 +9,12 @@
 [BaSIS-aligned update conventions](docs/RELEASE_CONVENTIONS.md).
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)
-adds standalone metadata validation for the proposed sequencing modes. This
-development branch pins Snakemake 9.27.1 and retains the existing v9 scientific
-routes; the new multi-platform assembly adapters are not yet enabled.
+adds standalone metadata validation for the proposed sequencing modes, plus an
+experimental [FR paired-end library execution adapter](docs/ILLUMINA_LIBRARIES.md).
+It preserves preparations through trimming and uses a separate pinned SPAdes
+environment. PacBio, mate-pair and other new routes remain metadata-only.
+This development branch pins Snakemake 9.27.1; legacy input layouts retain their
+existing Unicycler route.
 Supported run controls now [default to Auto](docs/AUTO_SETTINGS.md), with
 explicit overrides and saved settings for consistent resumes.
 

@@ -32,6 +32,18 @@ def test_auto_uses_capacity_and_scheduler_and_preserves_existing_preset(tmp_path
     assert not s.path.exists()  # Preview is read-only.
 
 
+def test_manifest_content_is_part_of_resume_identity(tmp_path):
+    manifest = tmp_path / 'inputs.yaml'
+    manifest.write_text('fixture: first\n')
+    first = resolve(tmp_path, {'input_manifest': str(manifest)})
+    first.persist()
+    assert resolve(tmp_path, {'input_manifest': str(manifest)}).reused
+    manifest.write_text('fixture: changed\n')
+    changed = resolve(tmp_path, {'input_manifest': str(manifest)})
+    assert changed.settings_id != first.settings_id
+    assert not changed.reused and first.path.exists()
+
+
 def test_small_machine_and_manual_spades_constraint(tmp_path):
     s = resolve(tmp_path, capacity=capacity(2, 4000))
     assert s.config["total_mem_mb"] == 3200

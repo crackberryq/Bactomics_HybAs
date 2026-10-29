@@ -174,6 +174,11 @@ class SettingsResolution:
                    "sample_sheet": str(sheet_path) if sheet_path else None,
                    "sample_sheet_sha256": hashlib.sha256(sheet_path.read_bytes()).hexdigest()
                    if sheet_path and sheet_path.is_file() else None}
+        manifest = requested.get("input_manifest")
+        if manifest:
+            manifest_path = Path(str(manifest)).expanduser().absolute()
+            context.update(input_manifest=str(manifest_path),
+                           input_manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest())
         self.identity = {"policy_version": POLICY_VERSION, "requested_config": self.requested,
                          "request_context": context}
         self.settings_id = digest(self.identity)

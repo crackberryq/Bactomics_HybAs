@@ -91,3 +91,8 @@ resolved choices. Preserve the settings directory with the run's provenance.
 
 This is a development feature in the HybAs draft. Bactologix controls and
 exact-commit execution compatibility still need release integration.
+
+For the experimental [Illumina library adapter](ILLUMINA_LIBRARIES.md), the
+manifest path and content hash are included in request identity. Frozen sample
+plans retain the library strategy, declarations and SPAdes selection. Auto still
+requires an explicit strategy for multiple independent preparations.

@@ -3,10 +3,11 @@
 This is part of the [unreleased alpha target](RELEASE_10.0.0a1.md). Future
 updates follow the [BaSIS-aligned release conventions](RELEASE_CONVENTIONS.md).
 
-Status: **development preview, manifest validation only**. The scientific
-routes remain the HybAs 9.0.0-AWARE baseline, with Snakemake 9.27.1 pinned for
-this development branch. This change does not implement a new assembler,
-change any AWARE decision, or connect these manifests to `Hybas.smk`.
+Status: **development preview**. The standalone validator remains metadata-only.
+A separate [Illumina library execution adapter](ILLUMINA_LIBRARIES.md) now connects
+FR paired-end manifests to `Hybas.smk`, using SPAdes 4.3.0. Other new routes remain
+metadata-only. Legacy folder inputs retain the Unicycler baseline. Snakemake
+9.27.1 is pinned; AWARE decisions are unchanged.
 The Research Report continues independently in PR #3.
 
 ## What works now
@@ -29,8 +30,9 @@ means valid metadata; code 2 means a manifest/read error, with the field locatio
 on standard error. No Snakemake or external analysis tools are launched.
 
 Copy the example to `inputs.local.yaml` before editing. Local YAML files are
-already gitignored. Do not replace the existing v9 `config.yaml` or
-`samples.tsv` with this manifest; v9 does not consume it.
+already gitignored. A manifest is a separate file, not a replacement for
+`config.yaml`. The development adapter consumes it through `input_manifest`;
+production v9 does not consume it. See the adapter guide for executable scope.
 
 ## Schema version 1
 
@@ -53,7 +55,8 @@ unique within a sample; read-group IDs are unique within a library.
 - `orientation`: explicitly declare `fr`, `rf`, or `ff`; never inferred from filenames.
 - `insert_size_bp`: positive integer representing the declared library insert
   size. Required for each complementary Illumina library; it is not measured by
-  this validator or forwarded to an assembler.
+  this validator. The execution adapter uses it to order libraries, while SPAdes
+  estimates insert distributions.
 - PacBio `chemistry`: explicitly declare `hifi` or `clr`. Corrected CLR, BAM
   imports and other representations need a later schema/adapter decision.
 - All files must be literal Linux/WSL paths ending in `.fastq`, `.fq`,
@@ -73,7 +76,7 @@ merges or flattens library groups.
 
 Here `auto` means **infer a metadata mode from explicit declarations**. It does
 not automatically select an assembler, polishing algorithm or executable route.
-Later execution integration must enforce qualification separately.
+The separate execution adapter enforces its narrower supported scope.
 
 | Mode | Accepted declarations |
 |---|---|
@@ -94,23 +97,24 @@ all-paired-end complementary libraries must have at least two distinct sizes.
 Mixed ONT/PacBio, mixed HiFi/CLR, mate-pair-only, and mate-pair plus long-read
 combinations are not supported in this first contract. A manual mode cannot
 silently omit incompatible input. Library orientation and run IDs are metadata
-claims; checking them against the actual files is future work.
+claims. The execution adapter audits read pairing but does not infer or verify
+physical library orientation or preparation from sequence data.
 
 The output preserves the original requested mode, the selected metadata mode,
 the reason category (`explicit` or `declared_metadata`), each library/read group,
 and a SHA-256 of the source manifest. This hash identifies the manifest bytes,
 not the sequence files. Input declaration order is retained.
 
-## Assembly/polishing design matrix — not executable
+## Assembly/polishing status
 
-These are candidate integration directions, not tested v10 tool selections.
-No new scientific tool versions or assembler commands are introduced in this milestone.
+The FR paired-end adapter is experimental software integration. All remaining
+new directions below require separate adapters and scientific qualification.
 
 | Mode | Assembly direction | Polishing direction / open decision |
 |---|---|---|
-| Illumina only | Preserve existing Unicycler route | Preserve configurable short-read polishing |
-| Dual Illumina, repeat runs | Preserve same-library grouping; keep independent libraries separate; evaluate multi-library SPAdes adapter | Library-aware short-read evidence and provenance |
-| Dual Illumina, complementary | Evaluate multi-library SPAdes adapter | Preserve library type/orientation through preprocessing and polishing eligibility |
+| Illumina only | Legacy Unicycler; manifest FR paired-end uses SPAdes | Preserve configurable short-read polishing |
+| Dual Illumina, repeat runs | Experimental SPAdes adapter preserves same-library grouping and separates preparations | Library-aware short-read evidence and provenance |
+| Dual Illumina, complementary | Experimental SPAdes for FR paired-end; mate-pair remains pending | Preserve library type/orientation through preprocessing and polishing eligibility |
 | ONT only | Preserve existing Unicycler baseline; evaluate a separate long-read assembler adapter | Explicit ONT metadata/model compatibility before any new route |
 | Illumina + ONT | Preserve current hybrid baseline | Preserve existing configurable polishing contract |
 | PacBio only | Separate HiFi/CLR adapters; Flye is a candidate | Chemistry-specific qualification; no inherited ONT polishing defaults |
@@ -122,14 +126,15 @@ Primary references: [SPAdes input model](https://ablab.github.io/spades/input.ht
 and [Unicycler](https://github.com/rrwick/Unicycler).
 Upstream support does not establish that HybAs's installed versions, wrappers or
 postprocessing support a combination. This matrix intentionally does not claim
-that any candidate has been qualified here.
+that assembly accuracy has been qualified here.
 
 ## Development gates
 
-1. **This milestone:** input declarations, strict validation, metadata-only mode
+1. **Implemented:** input declarations, strict validation, metadata-only mode
    selection, examples, and regression tests.
-2. **Execution adapters:** define stable library-level artifacts, provenance and
-   resource contracts; add independent adapter tests before DAG integration.
+2. **Execution adapters:** FR paired-end library artifacts, provenance, resource
+   contracts and DAG integration are implemented experimentally. Mate-pair and
+   PacBio adapters remain pending.
 3. **AWARE extension:** keep target election, independent actions and confidence
    separate. New platforms must have explicit evidence identities and a
    separately reviewed policy; PacBio must not masquerade as ONT.
@@ -145,7 +150,8 @@ This branch's `environment.yaml` pins Python 3.11 and Snakemake 9.27.1. CI uses
 that same Snakemake release on Python 3.11/3.12. A two-line compatibility change
 unwraps Snakemake's newer `Resource.value` object in the memory-budget check;
 it also accepts the scalar resource values used by 9.6.2. Reservation values,
-AWARE decisions, scientific routes and rule environment recipes are unchanged.
+AWARE decisions remain unchanged. The new library adapter uses its own pinned
+assembly environment; existing rule environment recipes are unchanged.
 
 The runner upgrade passed 184 local software tests on 9.27.1 using the documented
 container benchmark workaround, plus 13 existing DAG/budget checks on 9.6.2.

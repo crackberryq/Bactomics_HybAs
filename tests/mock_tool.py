@@ -45,7 +45,7 @@ if tool == os.environ.get('HYBAS_TEST_FAIL_TOOL') and os.environ.get('HYBAS_TEST
 if tool == 'conda':
     if '--version' in args: print('conda test-stub')
     elif 'list' in args:
-        for name in ['unicycler','racon','medaka','polypolish','samtools','bwa','quast','seqkit','multiqc']:
+        for name in ['unicycler','spades','racon','medaka','polypolish','samtools','bwa','quast','seqkit','multiqc']:
             print(name+' 1.0 fixture')
     else: print('name: fixture\ndependencies: []')
 elif tool == 'pigz':
@@ -79,6 +79,21 @@ elif tool == 'extract_kraken_reads.py':
 elif tool == 'unicycler':
     assert '--min_fasta_length' in args and '--spades_options' in args
     write(Path(arg('-o'))/'assembly.fasta','>fixture\n'+'A'*1200+'\n')
+elif tool == 'spades.py':
+    dataset=json.loads(Path(arg('--dataset')).read_text())
+    assert dataset and '-m' in args and '-t' in args
+    names=set()
+    for lib in dataset:
+        assert lib['type']=='paired-end' and lib['orientation']=='fr'
+        assert len(lib['left reads'])==len(lib['right reads'])==1
+        ids=[]
+        for path in [lib['left reads'][0],lib['right reads'][0]]:
+            with gzip.open(path,'rt') as handle: lines=handle.read().splitlines()
+            assert lines and len(lines)%4==0
+            ids.append(lines[::4])
+        assert ids[0]==ids[1] and not names.intersection(ids[0])
+        names.update(ids[0])
+    write(Path(arg('-o'))/'contigs.fasta','>short\nACGT\n>fixture\n'+'C'*1200+'\n')
 elif tool == 'minimap2': print('fixture\t4\t0\t4\t+\tfixture\t1200\t0\t4\t4\t4\t60')
 elif tool == 'racon': sys.stdout.write(extend(args[-1],'C'))
 elif tool == 'medaka_consensus': write(Path(arg('-o'))/'consensus.fasta',extend(arg('-d'),'G'))

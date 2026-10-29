@@ -15,7 +15,12 @@ Work remains in [draft PR #4](https://github.com/crackberryq/Bactomics_HybAs/pul
 - Validate declarations for seven proposed input modes while preserving
   sample/library/run/read-group identity. This is metadata validation only;
   outputs explicitly retain `execution_ready: false`.
-- Collect computational records automatically: all 51 concrete rules have
+- Add an experimental FR paired-end library adapter: namespace/audit read
+  pairs, preserve preparations through trimming, use separate SPAdes dataset
+  entries, and record assembly/library provenance. SPAdes 4.3.0 has a separate
+  pinned environment. Mate-pair and PacBio execution remain pending. See
+  [ILLUMINA_LIBRARIES.md](ILLUMINA_LIBRARIES.md).
+- Collect computational records automatically: all concrete rules have
   benchmarks, and each execution preserves job attempts, available CPU/memory/
   I/O measurements, timing, hardware and runner details, and JSON/TSV exports.
   Include computational history in Snakemake reports. Missing measurements
@@ -23,9 +28,10 @@ Work remains in [draft PR #4](https://github.com/crackberryq/Bactomics_HybAs/pul
 
 ## Update and test
 
-There is no published 10.0.0a1 update to install yet. The existing scientific
-execution routes and runtime labels retain the v9 baseline. Do not use the
-new manifest as a replacement for the current run configuration.
+There is no published 10.0.0a1 update to install yet. Legacy execution routes
+and runtime labels retain the v9 baseline. The experimental manifest adapter
+is enabled explicitly through `input_manifest` in the run configuration; see
+its guide for scope and limitations.
 
 Before publication, align runtime/citation/version metadata, complete the
 release checks, and register exact-commit Bactologix compatibility. The final
@@ -47,7 +53,8 @@ This document is a development status record, not a release acceptance receipt.
 
 Still pending:
 
-- Executable adapters and qualification for the proposed new input modes.
+- Scientific qualification of the FR paired-end adapter, plus executable
+  adapters and qualification for the remaining proposed input modes.
 - Integration of the separate [Research Report PR #3](https://github.com/crackberryq/Bactomics_HybAs/pull/3).
 - Final Bactologix controls/compatibility, release metadata and publication.
 

@@ -14,7 +14,7 @@ import yaml
 ROOT=Path(__file__).resolve().parents[1]
 SNAKE=shutil.which('snakemake') or str(Path(sys.executable).with_name('snakemake'))
 TOOLS=['conda','pigz','fastqc','NanoPlot','fastp','filtlong','kraken2','extract_kraken_reads.py',
-       'unicycler','minimap2','racon','medaka_consensus','bwa','samtools','polypolish','quast.py','seqkit','multiqc','prokka','busco']
+       'unicycler','spades.py','minimap2','racon','medaka_consensus','bwa','samtools','polypolish','quast.py','seqkit','multiqc','prokka','busco']
 
 
 def prepare(tmp, modes, polish='tripolish', pp=True, kraken=False):

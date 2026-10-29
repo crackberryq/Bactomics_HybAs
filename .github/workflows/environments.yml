@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [assembly, polishing, medaka, qc, annotation]
+        environment: [assembly, library_assembly, polishing, medaka, qc, annotation]
     defaults:
       run:
         shell: bash -el {0}
@@ -29,6 +29,8 @@ jobs:
           channel-priority: strict
           conda-remove-defaults: true
       - run: bash workflow/envs/${{ matrix.environment }}.post-deploy.sh
+      - if: matrix.environment == 'library_assembly'
+        run: python tests/native_library_smoke.py
 
   controller:
     runs-on: ubuntu-latest

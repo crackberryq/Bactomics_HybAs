@@ -2,6 +2,12 @@
 
 ## HybAs AWARE 10.0.0a1 — unreleased alpha target
 
+- Add an experimental FR paired-end library execution adapter. Audit and
+  namespace read pairs, keep preparations separate through fastp and SPAdes
+  4.3.0, and retain library/stage provenance and computational benchmarks.
+  Manifest content participates in frozen settings identity. Mate-pair, RF/FF
+  and PacBio execution remain blocked pending separate adapters/qualification.
+
 - Resolve supported run controls with Auto defaults while retaining explicit
   overrides. Detect local CPU/memory limits, verify manual input modes and
   retain existing processing presets and required-database checks.
