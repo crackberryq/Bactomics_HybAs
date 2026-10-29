@@ -151,6 +151,15 @@ def render_report(runtime_dir):
           r["totals"]["measured_job_cpu_seconds_sum"], r["totals"]["largest_job_peak_rss_mib"]] for r in runs]))
     for run in runs:
         content.append("<details><summary>" + cell(run["run_id"]) + " — " + cell(run["status"]) + "</summary>")
+        if run.get("settings_decisions"):
+            content.append("<details><summary>Resolved run settings</summary>")
+            content.append(table(["Setting", "Requested", "Selected", "Source", "Reason"],
+                [[name, d["requested"], d["value"], d["source"], d["reason"]]
+                 for name, d in sorted(run["settings_decisions"].items())]))
+            content.append(table(["Sample", "Input mode", "Mode reason", "Planned polishing stages"],
+                [[sample, plan["mode"], plan["mode_reason"], ", ".join(plan["planned_polishing_stages"]) or "none"]
+                 for sample, plan in sorted(run.get("sample_plans", {}).items())]))
+            content.append("<small>Settings snapshot: " + cell(run["settings_id"]) + "</small></details>")
         content.append(table(["Rule", "Sample", "Attempt", "Status", "Threads requested", "Wall s", "CPU s", "Peak RSS MiB", "Read MiB", "Write MiB", "Measurement status"],
             [[j["rule"], j["wildcards"].get("isolate", "global"), j["attempt"], j["status"], j["threads_requested"],
               m.get("wall_seconds"), m.get("cpu_seconds"), m.get("max_rss_mib"), m.get("io_read_mib"),
@@ -164,7 +173,7 @@ def render_report(runtime_dir):
 class ComputationalRecorder(logging.Handler):
     """Synchronous event capture: persist starts and endings before possible retry."""
 
-    def __init__(self, workflow, base_dir, source, config_json, samples):
+    def __init__(self, workflow, base_dir, source, config_json, samples, settings=None):
         super().__init__()
         self.workflow = workflow
         self.base_dir = Path(base_dir)
@@ -172,6 +181,7 @@ class ComputationalRecorder(logging.Handler):
         self.source = Path(source)
         self.config_hash = hashlib.sha256(config_json.encode()).hexdigest()
         self.samples = list(samples)
+        self.settings = settings
         self.owner_pid = os.getpid()
         self.data = None
         self.active = {}
@@ -182,6 +192,14 @@ class ComputationalRecorder(logging.Handler):
     def emit(self, record):
         if os.getpid() != self.owner_pid:
             return
+        # ExecutionSettings does not exist while parsing the Snakefile. Check
+        # the mandatory freeze hook once Snakemake has supplied those settings,
+        # before DAG execution. This error must not become a metrics warning.
+        if (self.settings is not None and str(getattr(record, "event", "")) == "workflow_started"
+                and self.workflow.execution_settings.no_hooks):
+            message = "HybAs requires start hooks to freeze resolved settings; omit --no-hooks"
+            print(message, file=sys.stderr)  # Snakemake --quiet all also hides its error renderer.
+            raise ValueError(message)
         try:
             event = str(getattr(record, "event", ""))
             if event == "workflow_started":
@@ -232,6 +250,12 @@ class ComputationalRecorder(logging.Handler):
             config_sha256=self.config_hash, source_sha256=hashlib.sha256(self.source.read_bytes()).hexdigest(),
             machine=machine_info(self.base_dir), requested_resources=plain_resources(self.workflow.global_resources),
             measurement_method="Snakemake native sampled job benchmarks", collection_errors=[])
+        if self.settings is not None:
+            self.data.update(settings_id=self.settings.settings_id,
+                settings_snapshot=str(self.settings.path),
+                settings_decisions=self.settings.record["decisions"],
+                sample_plans=self.settings.record["sample_plans"])
+            write_json(self.run_dir / "resolved_settings.json", self.settings.record)
         self.save()
 
     def event(self, kind, job):
@@ -325,11 +349,11 @@ class ComputationalRecorder(logging.Handler):
         super().close()
 
 
-def install_recorder(workflow, base_dir, source, config_json, samples):
+def install_recorder(workflow, base_dir, source, config_json, samples, settings=None):
     from snakemake.logging import logger
     workflow.output_settings.benchmark_extended = True
     if not workflow.is_main_process:
         return None
-    recorder = ComputationalRecorder(workflow, base_dir, source, config_json, samples)
+    recorder = ComputationalRecorder(workflow, base_dir, source, config_json, samples, settings=settings)
     logger.addHandler(recorder)
     return recorder

@@ -1,7 +1,7 @@
-# Native Snakemake scheduling defaults. Adjust mem_mb to the RAM available to
-# this workflow (including the WSL VM limit). Override with --resources if needed.
+# Native scheduling defaults. HybAs resolves CPU affinity/cgroup limits and an
+# 80% memory budget. Explicit --cores/--resources remain scheduling ceilings.
+cores: all
 resources:
-  mem_mb: 16000
   kraken_jobs: 1
 rerun-incomplete: true
 printshellcmds: false

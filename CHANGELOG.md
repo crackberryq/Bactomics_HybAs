@@ -2,9 +2,15 @@
 
 ## HybAs AWARE 10.0.0a1 — unreleased alpha target
 
+- Resolve supported run controls with Auto defaults while retaining explicit
+  overrides. Detect local CPU/memory limits, verify manual input modes and
+  retain existing processing presets and required-database checks.
+- Freeze resolved choices/reasons before execution, reuse them for unchanged
+  requests and retain earlier snapshots after explicit configuration edits.
+  Include selections in computational records, reports and provenance.
 - Adopt BaSIS-style product names, numeric prerelease versions, `v<version>`
   tags and version-specific release documents for future updates.
-- Record completed work, pending Auto settings/execution integration and
+- Record completed work, pending execution/release integration and
   release gates in `docs/RELEASE_10.0.0a1.md`. This documentation update does
   not publish a release or change the v9 runtime/configuration contract.
 

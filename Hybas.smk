@@ -57,6 +57,7 @@ from workflow_support import (VERSION, normalize_taxid, manual_taxid, validate_i
     file_identity, require_fasta, write_json, quast_metric as read_quast_metric)
 from datetime import datetime
 from computational import install_recorder, render_report
+from settings import SettingsResolution, resource_value
 from snakemake.io import report, directory, touch
 
 def as_bool(x):
@@ -72,6 +73,19 @@ def as_bool(x):
 
 configfile: "config.yaml"
 report: "workflow/report/workflow.rst"
+
+# Resolve before constructing rule parameters. Child jobs reuse the controller's
+# frozen record; parsing/dry runs only preview and never write a settings file.
+REQUESTED_CONFIG = json.dumps(config, sort_keys=True, default=str)
+SETTINGS = SettingsResolution(config,
+    cores=resource_value(workflow.global_resources, "_cores"),
+    mem_mb=resource_value(workflow.global_resources, "mem_mb"))
+config.clear()
+config.update(SETTINGS.config)
+workflow.global_resources["mem_mb"] = SETTINGS.memory_budget
+workflow.global_resources["_cores"] = SETTINGS.cpu_budget
+if workflow.is_main_process:
+    print(SETTINGS.summary())
 
 ###############################################################################
 # SECTION 1 — GLOBAL CONFIG
@@ -1108,7 +1122,8 @@ DB_CORE = [os.path.join(KRAKEN_DB_DIR, f) for f in ("hash.k2d", "opts.k2d", "tax
 CONFIG_FILES = [os.path.abspath(x) for x in list(workflow.configfiles) if os.path.isfile(x)]
 SAMPLE_FILES = [SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) else []
 SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow", "lib", "workflow_support.py")
-SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE]
+SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE,
+                os.path.join(SOURCE_ROOT, "workflow", "lib", "settings.py")]
 EFFECTIVE_CONFIG = json.dumps(config, sort_keys=True, default=str)
 AWARE_SETTINGS = {k: v for k, v in globals().copy().items() if k.startswith("KRAKEN_") and isinstance(v, (str, bool, int, float))}
 # Explicitly fingerprint only controller source so report-only edits do not rerun classification.
@@ -1228,6 +1243,10 @@ if not SETUP_ONLY and not ADMIN_MODE:
         else:
             raise ValueError(f"{iso}: no valid inputs found in raw/illumina and raw/nanopore")
 
+        requested_mode = config["run_mode"]
+        if requested_mode != "auto" and requested_mode != mode:
+            raise ValueError(f"{iso}: explicit run_mode={requested_mode!r} conflicts with detected {mode!r}; no inputs will be silently omitted")
+
         taxid = normalize_taxid(SAMPLE_INFO[iso]["target_taxid"] or DEFAULT_TARGET_TAXID)
         lineage = SAMPLE_INFO[iso]["busco_lineage"] or DEFAULT_BUSCO_LINEAGE
         medaka_model = SAMPLE_INFO[iso]["medaka_model"] or DEFAULT_MEDAKA_MODEL
@@ -1254,11 +1273,13 @@ if not SETUP_ONLY and not ADMIN_MODE:
     reservations = {"assembly": ASSEMBLY_MEM_MB}
     if KRAKEN_PROFILE_ENABLED: reservations["kraken"] = KRAKEN_MEM_MB
     if any(planned_stages(i) for i in SAMPLES): reservations["polishing"] = POLISH_MEM_MB
+    if RUN_BUSCO: reservations["busco"] = rule_memory("busco", 4096)
+    if RUN_PROKKA: reservations["prokka"] = rule_memory("prokka", 4096)
     if budget is not None:
         for stage, needed in reservations.items():
             if needed > int(budget):
                 raise ValueError(f"{stage} requires a {needed} MB reservation but the scheduling budget is {budget} MB. "
-                    "Set profiles/default/config.yaml resources.mem_mb to a budget the host can supply, "
+                    "Set total_mem_mb or --resources mem_mb to a budget the host can supply, "
                     "or reduce the stage's requirement. Snakemake must not silently cap this reservation.")
     if not os.access(BASE_DIR, os.W_OK):
         raise ValueError(f"base_dir is not writable: {BASE_DIR}")
@@ -1277,6 +1298,18 @@ else:
             "busco_lineage": SAMPLE_INFO[iso]["busco_lineage"] or DEFAULT_BUSCO_LINEAGE,
             "medaka_model": SAMPLE_INFO[iso]["medaka_model"] or DEFAULT_MEDAKA_MODEL,
         }
+
+SETTINGS.set_sample_plans({iso: {
+    "requested_mode": config["run_mode"], "mode": RUN_MODE[iso],
+    "mode_reason": "Setup/admin mode" if SETUP_ONLY or ADMIN_MODE else (
+        "Detected input layout" if config["run_mode"] == "auto" else "Explicit mode verified against inputs"),
+    "inputs": [os.path.abspath(p) for p in illumina_r1_files(iso) + illumina_r2_files(iso) + nanopore_files(iso)],
+    "overrides": ISO_OVERRIDES[iso], "polish_mode": POLISH_MODE,
+    "planned_polishing_stages": planned_stages(iso),
+    "modules": {"kraken": KRAKEN_PROFILE_ENABLED, "busco": RUN_BUSCO,
+                "prokka": RUN_PROKKA, "multiqc": RUN_MULTIQC,
+                "polypolish": needs_polypolish(iso)},
+} for iso in SAMPLES})
 
 ###############################################################################
 # SECTION 7 — STEP LABELING
@@ -1387,6 +1420,9 @@ rule global_workflow_provenance:
             out.write(f"workflow_version\t{WORKFLOW_VERSION}\n")
             out.write(f"source_sha256\t{sha256_file(SOURCE_FILES[0])}\n")
             out.write(f"effective_config_json\t{EFFECTIVE_CONFIG}\n")
+            out.write(f"requested_config_json\t{REQUESTED_CONFIG}\n")
+            out.write(f"resolved_settings_id\t{SETTINGS.settings_id}\n")
+            out.write(f"resolved_settings_path\t{SETTINGS.path}\n")
             out.write(f"base_dir\t{BASE_DIR}\n")
             out.write(f"sample_sheet\t{SAMPLE_SHEET}\n")
             out.write(f"threads_default\t{THREADS}\n")
@@ -1730,6 +1766,9 @@ rule workflow_provenance:
             out.write(f"workflow_version\t{WORKFLOW_VERSION}\n")
             out.write(f"source_sha256\t{sha256_file(SOURCE_FILES[0])}\n")
             out.write(f"effective_config_json\t{EFFECTIVE_CONFIG}\n")
+            out.write(f"requested_config_json\t{REQUESTED_CONFIG}\n")
+            out.write(f"resolved_settings_id\t{SETTINGS.settings_id}\n")
+            out.write(f"resolved_settings_path\t{SETTINGS.path}\n")
             out.write(f"threads_default\t{THREADS}\n")
             out.write(f"keep_percent\t{KEEP_PERCENT}\n")
             out.write(f"racon_rounds\t{RACON_ROUNDS}\n")
@@ -3850,7 +3889,12 @@ rule computational_report:
         render_report(provenance_runtime_dir())
 
 COMPUTATIONAL_RECORDER = install_recorder(
-    workflow, BASE_DIR, os.path.join(SOURCE_ROOT, "Hybas.smk"), EFFECTIVE_CONFIG, SAMPLES)
+    workflow, BASE_DIR, os.path.join(SOURCE_ROOT, "Hybas.smk"), EFFECTIVE_CONFIG, SAMPLES,
+    settings=SETTINGS)
+
+onstart:
+    if not workflow.touch:
+        SETTINGS.persist()
 
 onsuccess:
     if COMPUTATIONAL_RECORDER is not None:

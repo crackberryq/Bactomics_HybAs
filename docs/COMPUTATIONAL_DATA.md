@@ -14,6 +14,9 @@ Each controller execution writes a unique directory under
   hardware/runner information, source/config hashes, requested resources and all
   job attempts with measured resource values.
 - `events.jsonl`: append-only job start/end records, flushed as events arrive.
+- `resolved_settings.json`: the settings request, selected values/reasons and
+  sample plans for this invocation. `run.json` links the immutable settings
+  identity and includes its decisions alongside current scheduler limits.
 - `jobs.tsv`: one row per benchmark repetition or unmeasured attempt, exported
   when execution ends. Missing measurements are `NA` (JSON uses `null`).
 - `benchmarks/`: copies of fresh native benchmark files, archived when a job
@@ -23,6 +26,11 @@ Each controller execution writes a unique directory under
 measurements. It is also registered in the native Snakemake report. Existing
 per-sample `benchmarks/*.tsv` remain available; global/provenance rules use
 `provenance/runtime/benchmarks/`.
+
+Each run has a collapsible resolved-settings section. The shared checksummed
+snapshot under `provenance/runtime/resolved_settings/` is reused for an unchanged
+request; the per-invocation copy preserves its association with this run. See
+[Auto settings and resume](AUTO_SETTINGS.md) for precedence and re-detection.
 
 Successful, failed and resumed invocations get separate records. Retries retain
 separate attempts. A no-work invocation records zero new job attempts and never

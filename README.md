@@ -12,6 +12,8 @@
 adds standalone metadata validation for the proposed sequencing modes. This
 development branch pins Snakemake 9.27.1 and retains the existing v9 scientific
 routes; the new multi-platform assembly adapters are not yet enabled.
+Supported run controls now [default to Auto](docs/AUTO_SETTINGS.md), with
+explicit overrides and saved settings for consistent resumes.
 
 HybAs is a native Snakemake workflow for hybrid, Illumina-only and ONT-only bacterial assembly, with taxon-aware read handling, optional polishing, QC and provenance. Run `Hybas.smk` directly. Snakemake creates and activates the rule environments; there is no HybAs Python package to install.
 
@@ -81,15 +83,15 @@ If neither mate has mapped alignments, Polypolish records an explicit skip and r
 
 ## Resources
 
-Edit `profiles/default/config.yaml` to fit the RAM available to Linux/WSL. Its initial total scheduling budget is **16000 MB**, with **one concurrent Kraken job**. This is a scheduling budget, not an operating-system memory limit. Leave RAM for the operating system and database/cache overhead.
+Auto detects local Linux/WSL CPU and memory capacity, including affinity and container limits. It uses 80% of the memory limit, with **one concurrent Kraken job**. Explicit `--cores` and `--resources mem_mb=...` remain ceilings; `total_mem_mb` can specify a manual budget. These are scheduling budgets, not operating-system memory limits. See [Auto settings](docs/AUTO_SETTINGS.md) for per-stage allocations and frozen resume behavior.
 
-- `assembly_mem_mb`: assembly job reservation, default 8192.
-- `spades_memory_gb`: SPAdes memory argument forwarded by Unicycler, default 8; must fit the assembly reservation.
-- `polishing_mem_mb`: polishing/mapping reservation, default 4096.
+- `assembly_mem_mb`: Auto selects up to the existing 8192 MB reservation within the budget; explicit values override it.
+- `spades_memory_gb`: Auto fits the assembly reservation; an explicit SPAdes memory argument must also fit it.
+- `polishing_mem_mb`: Auto selects up to the existing 4096 MB reservation within the budget; explicit values override it.
 - `kraken_mem_mb`: optional explicit reservation. If omitted, HybAs estimates it from the Kraken core database files plus overhead. This estimate is not a measured peak.
 - `min_fasta_length`: Unicycler export threshold, default 1000.
 
-A large Kraken database can exceed the profile's example memory budget; size the budget and the database for your machine before running. HybAs rejects an assembly, Kraken or polishing reservation above that total before processing. Persistent Kraken processes/database reuse are not implemented in this release.
+A large Kraken database can exceed the resolved memory budget; size the budget and the database for your machine before running. HybAs rejects enabled assembly, Kraken, polishing, BUSCO or annotation reservations above that total before processing. Persistent Kraken processes/database reuse are not implemented in this release.
 
 ## Databases
 
