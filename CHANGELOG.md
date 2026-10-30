@@ -5,8 +5,13 @@
 - Add an experimental FR paired-end library execution adapter. Audit and
   namespace read pairs, keep preparations separate through fastp and SPAdes
   4.3.0, and retain library/stage provenance and computational benchmarks.
-  Manifest content participates in frozen settings identity. Mate-pair, RF/FF
-  and PacBio execution remain blocked pending separate adapters/qualification.
+  Manifest content participates in frozen settings identity.
+- Extend execution to explicit pretrimmed RF/FF libraries, Nextera mate-pairs,
+  ONT manifests and separate PacBio HiFi/CLR paths. Preserve library identity
+  and platform-specific evidence; scientific qualification remains pending.
+- Generate the integrated research report with read-retention audits, actual
+  platform labels, input plans and computational-history links. See
+  `docs/PLATFORM_EXECUTION.md` for the supported input/preparation matrix.
 
 - Resolve supported run controls with Auto defaults while retaining explicit
   overrides. Detect local CPU/memory limits, verify manual input modes and

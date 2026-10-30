@@ -8,7 +8,7 @@ A separate [Illumina library execution adapter](ILLUMINA_LIBRARIES.md) now conne
 manifests to `Hybas.smk`, using platform-specific adapters. See
 [the executable matrix](PLATFORM_EXECUTION.md) for preparation requirements. Legacy folder inputs retain the Unicycler baseline. Snakemake
 9.27.1 is pinned; AWARE decisions are unchanged.
-The Research Report continues independently in PR #3.
+The Research Report from PR #3 is integrated into the workflow.
 
 ## What works now
 
