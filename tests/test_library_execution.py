@@ -115,7 +115,7 @@ def test_manifest_setup_preview_selects_library_environment(tmp_path):
     assert calls(tmp_path) == [] and not settings_snapshots(tmp_path)
 
 
-@pytest.mark.parametrize('change', ['mate_pair', 'rf', 'ff', 'pacbio', 'sheet_mismatch'])
+@pytest.mark.parametrize('change', ['mate_pair', 'rf', 'ff', 'sheet_mismatch'])
 def test_unsupported_manifest_fails_before_jobs(tmp_path, change):
     cfg, env, manifest = manifest_run(tmp_path)
     data = yaml.safe_load(manifest.read_text())
@@ -132,7 +132,7 @@ def test_unsupported_manifest_fails_before_jobs(tmp_path, change):
         config = yaml.safe_load(cfg.read_text()); config['sample_sheet'] = str(sheet); cfg.write_text(yaml.safe_dump(config))
     manifest.write_text(yaml.safe_dump(data))
     result = run(tmp_path, env, ok=False)
-    assert 'metadata-only' in result.stdout or 'exactly the same sample IDs' in result.stdout
+    assert 'declare preprocessing' in result.stdout or 'exactly the same sample IDs' in result.stdout
     assert calls(tmp_path) == [] and not settings_snapshots(tmp_path)
 
 

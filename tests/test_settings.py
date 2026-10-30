@@ -74,7 +74,7 @@ def test_explicit_values_win_without_silent_clipping(tmp_path):
 
 @pytest.mark.parametrize("key,value", [("threads", True), ("threads", 0), ("threads", 1.5),
     ("total_mem_mb", -1), ("total_mem_mb", None), ("run_busco", "maybe"),
-    ("run_prokka", 1), ("polish_mode", "guess"), ("run_mode", "pacbio_only")])
+    ("run_prokka", 1), ("polish_mode", "guess"), ("run_mode", "unsupported_future_mode")])
 def test_invalid_explicit_values_do_not_become_auto(tmp_path, key, value):
     with pytest.raises(ValueError):
         resolve(tmp_path, {key: value})

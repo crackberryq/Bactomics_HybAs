@@ -1,6 +1,6 @@
 """Experimental paired-end library adapter; no taxonomy or AWARE policy here.
 
-Only ordinary FR paired-end libraries are executable. Read names are namespaced
+Explicit library preparation and orientation determine execution. Read names are namespaced
 before shared classification, then used to restore library boundaries after the
 existing sample/platform cleaning decision. Original headers are retained.
 """
@@ -19,8 +19,9 @@ import subprocess
 import tempfile
 
 
-ADAPTER = "illumina-libraries-v1"
-MODES = {"illumina_only", "dual_illumina_runs", "dual_illumina_complementary"}
+ADAPTER = "manifest-execution-v2"
+MODES = {"illumina_only", "dual_illumina_runs", "dual_illumina_complementary",
+         "ont_only", "illumina_ont", "pacbio_only", "illumina_pacbio"}
 
 
 def execution_samples(validated):
@@ -30,13 +31,18 @@ def execution_samples(validated):
         name = sample["sample_id"]
         if selection["selected_mode"] not in MODES:
             raise ValueError(f"{name}: manifest mode {selection['selected_mode']!r} is metadata-only; "
-                             "this execution adapter supports Illumina paired-end libraries only")
+                             "unsupported manifest execution mode")
         for lib in sample["libraries"]:
-            if lib["library_type"] != "paired_end" or lib["orientation"] != "fr":
-                raise ValueError(f"{name}/{lib['library_id']}: only paired_end/fr preprocessing is executable; "
-                                 "mate-pair and rf/ff libraries remain metadata-only")
+            if lib["platform"] != "illumina":
+                continue
+            preprocessing = lib.get("preprocessing", "fastp" if lib["library_type"] == "paired_end" and lib["orientation"] == "fr" else None)
+            if preprocessing is None or (preprocessing == "fastp" and (lib["library_type"] != "paired_end" or lib["orientation"] != "fr")):
+                raise ValueError(f"{name}/{lib['library_id']}: declare preprocessing=pretrimmed for non-FR pairs, "
+                                 "or preprocessing=nextera_mate_pair for raw Nextera mate_pair/rf reads")
+        platforms = {lib["platform"] for lib in sample["libraries"]}
+        assembler = "flye" if "pacbio" in platforms else "unicycler" if platforms == {"ont"} else "spades"
         samples[name] = {**sample, "selection": selection, "adapter": ADAPTER,
-                         "assembler": "spades", "qualification": "experimental_software_adapter"}
+                         "assembler": assembler, "qualification": "experimental_software_adapter"}
     return samples
 
 
@@ -111,12 +117,69 @@ def prepare(plan, r1, r2, audit):
     write_json(audit / "read_groups.json", counts)
 
 
+def preprocess_library(lib, inputs, outdir, threads):
+    """Return real assembler datasets and ordinary paired reads for polishing."""
+    name = lib['library_id']
+    method = lib.get('preprocessing', 'fastp')
+    left, right = [outdir / f'{name}_R{mate}.trimmed.fq.gz' for mate in (1, 2)]
+    html_path, json_path = outdir / f'{name}.fastp.html', outdir / f'{name}.fastp.json'
+    if method == 'nextera_mate_pair':
+        prefix = outdir / f'{name}.nxtrim'
+        subprocess.run(['nxtrim', '-1', str(inputs[0]), '-2', str(inputs[1]),
+                        '-O', str(prefix), '--rf'], check=True)
+        datasets, category_counts = [], {}
+        for category in ('mp', 'pe', 'unknown', 'se'):
+            path = Path(str(prefix) + f'.{category}.fastq.gz')
+            if not path.is_file():
+                raise ValueError(f'NxTrim did not produce its {category} output for {name}')
+            count = sum(1 for _ in fastq(path))
+            category_counts[category] = count
+            if category != 'se' and count % 2:
+                raise ValueError(f'NxTrim {category} output has an odd read count')
+            if not count:
+                continue
+            if category in {'mp', 'pe'}:
+                datasets.append({'type': 'mate-pairs' if category == 'mp' else 'paired-end',
+                                 'orientation': 'rf' if category == 'mp' else 'fr',
+                                 'interlaced reads': [str(path)]})
+            else:
+                # Unknown pairs may be PE contaminants. Retain their sequence as
+                # unpaired evidence, without inventing a mate-pair relationship.
+                datasets.append({'type': 'single', 'single reads': [str(path)]})
+        if not datasets:
+            raise ValueError(f'{name}: NxTrim retained no reads')
+        details = {'preprocessing': method, 'nxtrim_read_counts': category_counts,
+                   'unknown_handling': 'unpaired_evidence', 'polishing_eligible': False}
+        write_json(json_path, details)
+        html_path.write_text('<!doctype html><h1>Nextera mate-pair preprocessing</h1><pre>' +
+                             html.escape(json.dumps(details, indent=2)) + '</pre>')
+        return datasets, [], details, html_path, sum(category_counts[c] for c in ('mp', 'pe', 'unknown')) // 2
+    if method == 'pretrimmed':
+        for src, dst in zip(inputs, (left, right)):
+            shutil.copyfile(src, dst)
+        details = {'preprocessing': method, 'fastp': 'not_run', 'quality_encoding': 'phred33'}
+        write_json(json_path, details)
+        html_path.write_text('<!doctype html><h1>Pretrimmed input</h1><p>Declared type and orientation preserved; no additional adapter trimming.</p>')
+    else:
+        subprocess.run(['fastp', '-i', str(inputs[0]), '-I', str(inputs[1]),
+                        '-o', str(left), '-O', str(right), '--thread', str(threads),
+                        '--html', str(html_path), '--json', str(json_path)], check=True)
+        details = json.loads(json_path.read_text())
+    remaining = sum(1 for _ in pairs(left, right))
+    if not remaining:
+        raise ValueError(f'{name}: no pairs remain after preprocessing; refusing to silently drop a library')
+    dataset = {'type': 'paired-end' if lib['library_type'] == 'paired_end' else 'mate-pairs',
+               'orientation': lib['orientation'], 'left reads': [str(left)], 'right reads': [str(right)]}
+    polishing = [dataset] if lib['library_type'] == 'paired_end' else []
+    return [dataset], polishing, details, html_path, remaining
+
+
 def trim(plan, r1, r2, outdir, combined1, combined2, report_html, report_json, threads):
     """Restore libraries after cleaning; run fastp separately for each library."""
     outdir = Path(outdir).absolute()
     outdir.mkdir(parents=True, exist_ok=True)
     counts = [0] * len(plan["libraries"])
-    reports, dataset = [], []
+    reports, dataset, polishing_inputs = [], [], []
     # Clean inputs are scratch files, not permanent second copies of all reads.
     with tempfile.TemporaryDirectory(prefix=".library-clean-", dir=outdir) as temporary:
         paths = [(Path(temporary) / f"{li}_R1.fq.gz", Path(temporary) / f"{li}_R2.fq.gz")
@@ -143,30 +206,24 @@ def trim(plan, r1, r2, outdir, combined1, combined2, report_html, report_json, t
             name = lib["library_id"]
             if not counts[li]:
                 raise ValueError(f"{name}: no pairs remain after cleaning; refusing to silently drop a library")
-            left, right = [outdir / f"{name}_R{mate}.trimmed.fq.gz" for mate in (1, 2)]
-            html_path, json_path = outdir / f"{name}.fastp.html", outdir / f"{name}.fastp.json"
-            subprocess.run(["fastp", "-i", str(paths[li][0]), "-I", str(paths[li][1]),
-                            "-o", str(left), "-O", str(right), "--thread", str(threads),
-                            "--html", str(html_path), "--json", str(json_path)], check=True)
-            remaining = sum(1 for _ in pairs(left, right))
-            if not remaining:
-                raise ValueError(f"{name}: no pairs remain after fastp; refusing to silently drop a library")
+            entries, eligible, details, html_path, remaining = preprocess_library(lib, paths[li], outdir, threads)
             reports.append({"library_id": name, "library_type": lib["library_type"],
                             "orientation": lib["orientation"], "declared_insert_size_bp": lib.get("insert_size_bp"),
                             "cleaned_pairs": counts[li], "trimmed_pairs": remaining,
-                            "fastp": json.loads(json_path.read_text()), "html_path": str(html_path)})
-            dataset.append({"type": "paired-end", "orientation": lib["orientation"],
-                            "left reads": [str(left)], "right reads": [str(right)]})
+                            "preprocessing": lib.get('preprocessing', 'fastp'),
+                            "polishing_eligible": bool(eligible), "fastp": details, "html_path": str(html_path)})
+            dataset.append(entries)
+            polishing_inputs.extend(eligible)
     # SPAdes estimates insert distributions. Declared sizes order the libraries,
     # but are not passed as an invented/unsupported dataset attribute.
     order = sorted(range(len(dataset)), key=lambda i: (plan["libraries"][i].get("insert_size_bp", 0), i))
-    write_json(outdir / "dataset.yaml", [dataset[i] for i in order])  # JSON is valid YAML.
+    write_json(outdir / "dataset.yaml", [entry for i in order for entry in dataset[i]])  # JSON is valid YAML.
     write_json(outdir / "libraries.json", {"adapter": ADAPTER, "plan": plan,
                "spades_library_order": [plan["libraries"][i]["library_id"] for i in order], "libraries": reports})
     for mate, dest in (("left reads", combined1), ("right reads", combined2)):
         # Concatenated gzip members retain complete, synchronized paired streams.
         with open(dest, "wb") as handle:
-            for lib in dataset:
+            for lib in polishing_inputs:
                 with open(lib[mate][0], "rb") as source:
                     shutil.copyfileobj(source, handle)
     write_json(report_json, {"schema": "hybas-library-fastp-v1", "libraries": reports})
@@ -177,7 +234,7 @@ def trim(plan, r1, r2, outdir, combined1, combined2, report_html, report_json, t
                       f"<iframe title=\"fastp report\" style=\"width:100%;height:800px\" "
                       f"srcdoc=\"{html.escape(Path(report['html_path']).read_text(), quote=True)}\"></iframe></details>")
     Path(report_html).write_text("<!doctype html><meta charset=\"utf-8\"><title>Library trimming</title>"
-                                "<h1>Illumina library trimming</h1><p>Separate fastp reports; "
+                                "<h1>Illumina library trimming</h1><p>Separate library preprocessing reports; "
                                 "rates are not pooled across libraries.</p>" + "".join(panels))
 
 

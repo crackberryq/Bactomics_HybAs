@@ -288,8 +288,8 @@ class SettingsResolution:
             raise ValueError("polish_mode must be auto, none, racon, medaka or tripolish")
         cfg["polish_mode"] = self.record["decisions"]["polish_mode"]["value"] = value
         mode = str(cfg.get("run_mode", "auto")).strip().lower()
-        if mode not in {"auto", "hybrid", "illumina_only", "ont_only"}:
-            raise ValueError("run_mode must be auto, hybrid, illumina_only or ont_only")
+        if mode not in {"auto", "hybrid", "illumina_only", "ont_only", "pacbio_only", "illumina_pacbio"}:
+            raise ValueError("run_mode must be auto, hybrid, illumina_only, ont_only, pacbio_only or illumina_pacbio")
         cfg["run_mode"] = mode
 
     def set_sample_plans(self, plans):

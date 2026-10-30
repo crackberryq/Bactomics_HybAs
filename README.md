@@ -10,9 +10,11 @@
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)
 adds standalone metadata validation for the proposed sequencing modes, plus an
-experimental [FR paired-end library execution adapter](docs/ILLUMINA_LIBRARIES.md).
-It preserves preparations through trimming and uses a separate pinned SPAdes
-environment. PacBio, mate-pair and other new routes remain metadata-only.
+experimental [library-aware execution adapters](docs/PLATFORM_EXECUTION.md).
+They preserve preparation identity and support declared Illumina orientations,
+Nextera mate-pair processing, ONT, PacBio HiFi/CLR, and supported hybrid inputs.
+Software checks do not establish biological accuracy. The offline research
+report includes per-platform read reconciliation and assembly provenance.
 This development branch pins Snakemake 9.27.1; legacy input layouts retain their
 existing Unicycler route.
 Supported run controls now [default to Auto](docs/AUTO_SETTINGS.md), with

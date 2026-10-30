@@ -1,7 +1,7 @@
 # HybAs workstation configuration template (copy to config.yaml; do not commit local paths)
 base_dir: ..
 sample_sheet: samples.tsv
-# Experimental FR paired-end library adapter; see docs/ILLUMINA_LIBRARIES.md.
+# Experimental platform/library adapters; see docs/PLATFORM_EXECUTION.md.
 # With a manifest, use sample_sheet: '' or a sheet containing exactly its samples.
 input_manifest: ''
 # Auto resolves supported controls once; explicit values override it.

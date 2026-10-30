@@ -21,16 +21,19 @@ def main():
     with tempfile.TemporaryDirectory(prefix='hybas-library-smoke-') as temp:
         root = Path(temp)
         dataset = []
-        for li, insert in enumerate((300, 600)):
+        for li, (insert, orientation, kind) in enumerate(((300, 'fr', 'paired-end'), (600, 'fr', 'paired-end'), (800, 'rf', 'paired-end'), (1000, 'ff', 'paired-end'), (2000, 'rf', 'mate-pairs'))):
             r1, r2 = root / f'lib{li}_1.fq.gz', root / f'lib{li}_2.fq.gz'
             with gzip.open(r1, 'wt') as left, gzip.open(r2, 'wt') as right:
                 for index in range(1000):
                     start = rng.randrange(len(sequence) - insert)
                     a = sequence[start:start + 150]
                     b = sequence[start + insert - 150:start + insert].translate(str.maketrans('ACGT', 'TGCA'))[::-1]
+                    complement = lambda value: value.translate(str.maketrans('ACGT', 'TGCA'))[::-1]
+                    if orientation == 'rf': a, b = complement(a), complement(b)
+                    elif orientation == 'ff': b = complement(b)
                     for handle, seq in ((left, a), (right, b)):
                         handle.write(f'@lib{li}_pair{index}\n{seq}\n+\n'+ 'I'*150 + '\n')
-            dataset.append({'type': 'paired-end', 'orientation': 'fr',
+            dataset.append({'type': kind, 'orientation': orientation,
                             'left reads': [str(r1)], 'right reads': [str(r2)]})
         source = root / 'dataset.yaml'; source.write_text(json.dumps(dataset))
         subprocess.run(['spades.py', '--dataset', str(source), '-o', str(root / 'assembly'),

@@ -5,8 +5,8 @@ updates follow the [BaSIS-aligned release conventions](RELEASE_CONVENTIONS.md).
 
 Status: **development preview**. The standalone validator remains metadata-only.
 A separate [Illumina library execution adapter](ILLUMINA_LIBRARIES.md) now connects
-FR paired-end manifests to `Hybas.smk`, using SPAdes 4.3.0. Other new routes remain
-metadata-only. Legacy folder inputs retain the Unicycler baseline. Snakemake
+manifests to `Hybas.smk`, using platform-specific adapters. See
+[the executable matrix](PLATFORM_EXECUTION.md) for preparation requirements. Legacy folder inputs retain the Unicycler baseline. Snakemake
 9.27.1 is pinned; AWARE decisions are unchanged.
 The Research Report continues independently in PR #3.
 
@@ -107,18 +107,10 @@ not the sequence files. Input declaration order is retained.
 
 ## Assembly/polishing status
 
-The FR paired-end adapter is experimental software integration. All remaining
-new directions below require separate adapters and scientific qualification.
-
-| Mode | Assembly direction | Polishing direction / open decision |
-|---|---|---|
-| Illumina only | Legacy Unicycler; manifest FR paired-end uses SPAdes | Preserve configurable short-read polishing |
-| Dual Illumina, repeat runs | Experimental SPAdes adapter preserves same-library grouping and separates preparations | Library-aware short-read evidence and provenance |
-| Dual Illumina, complementary | Experimental SPAdes for FR paired-end; mate-pair remains pending | Preserve library type/orientation through preprocessing and polishing eligibility |
-| ONT only | Preserve existing Unicycler baseline; evaluate a separate long-read assembler adapter | Explicit ONT metadata/model compatibility before any new route |
-| Illumina + ONT | Preserve current hybrid baseline | Preserve existing configurable polishing contract |
-| PacBio only | Separate HiFi/CLR adapters; Flye is a candidate | Chemistry-specific qualification; no inherited ONT polishing defaults |
-| PacBio + Illumina | Qualify HiFi and CLR combinations independently | Establish whether/how short-read polishing is appropriate for each route |
+All seven declared modes now have experimental execution paths. See
+[PLATFORM_EXECUTION.md](PLATFORM_EXECUTION.md) for assembly, polishing, library
+preparation, chemistry and reporting contracts. Software integration does not
+qualify analytical performance.
 
 Primary references: [SPAdes input model](https://ablab.github.io/spades/input.html),
 [SPAdes dataset representation](https://ablab.github.io/spades/running.html#specifying-multiple-libraries-with-yaml-data-set-file),
@@ -132,9 +124,9 @@ that assembly accuracy has been qualified here.
 
 1. **Implemented:** input declarations, strict validation, metadata-only mode
    selection, examples, and regression tests.
-2. **Execution adapters:** FR paired-end library artifacts, provenance, resource
-   contracts and DAG integration are implemented experimentally. Mate-pair and
-   PacBio adapters remain pending.
+2. **Execution adapters:** Illumina libraries/orientations, Nextera junction processing,
+   ONT manifests and separate HiFi/CLR paths are implemented experimentally,
+   with library provenance, resources and DAG integration.
 3. **AWARE extension:** keep target election, independent actions and confidence
    separate. New platforms must have explicit evidence identities and a
    separately reviewed policy; PacBio must not masquerade as ONT.

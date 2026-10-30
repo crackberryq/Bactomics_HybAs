@@ -1,0 +1,7 @@
+name: hybas-pacbio-assembly
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - flye=2.9.6

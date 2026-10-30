@@ -18,7 +18,7 @@ Work remains in [draft PR #4](https://github.com/crackberryq/Bactomics_HybAs/pul
 - Add an experimental FR paired-end library adapter: namespace/audit read
   pairs, preserve preparations through trimming, use separate SPAdes dataset
   entries, and record assembly/library provenance. SPAdes 4.3.0 has a separate
-  pinned environment. Mate-pair and PacBio execution remain pending. See
+  pinned environment. Declared mate-pair and PacBio execution adapters are now implemented. See
   [ILLUMINA_LIBRARIES.md](ILLUMINA_LIBRARIES.md).
 - Collect computational records automatically: all concrete rules have
   benchmarks, and each execution preserves job attempts, available CPU/memory/
@@ -28,8 +28,8 @@ Work remains in [draft PR #4](https://github.com/crackberryq/Bactomics_HybAs/pul
 
 ## Update and test
 
-There is no published 10.0.0a1 update to install yet. Legacy execution routes
-and runtime labels retain the v9 baseline. The experimental manifest adapter
+There is no published 10.0.0a1 update to install yet. Legacy execution routes retain their v9 behavior; development runtime labels
+use HybAs AWARE 10.0.0a1. The experimental manifest adapter
 is enabled explicitly through `input_manifest` in the run configuration; see
 its guide for scope and limitations.
 
@@ -53,10 +53,13 @@ This document is a development status record, not a release acceptance receipt.
 
 Still pending:
 
-- Scientific qualification of the FR paired-end adapter, plus executable
-  adapters and qualification for the remaining proposed input modes.
-- Integration of the separate [Research Report PR #3](https://github.com/crackberryq/Bactomics_HybAs/pull/3).
-- Final Bactologix controls/compatibility, release metadata and publication.
+- Representative reference-data qualification for the experimental routes.
+- Current-head native tool and regression checks (recorded on PR #4).
+- Reviewed exact-commit Bactologix compatibility and publication.
+
+The Research Report from PR #3 is integrated, with a PacBio-specific audit and
+links to computational records. See [PLATFORM_EXECUTION.md](PLATFORM_EXECUTION.md)
+for the complete executable input matrix and preparation requirements.
 
 See [V10_INPUTS.md](V10_INPUTS.md), [COMPUTATIONAL_DATA.md](COMPUTATIONAL_DATA.md)
 and [RELEASE_CONVENTIONS.md](RELEASE_CONVENTIONS.md) for the detailed contracts.

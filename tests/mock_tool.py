@@ -45,7 +45,7 @@ if tool == os.environ.get('HYBAS_TEST_FAIL_TOOL') and os.environ.get('HYBAS_TEST
 if tool == 'conda':
     if '--version' in args: print('conda test-stub')
     elif 'list' in args:
-        for name in ['unicycler','spades','racon','medaka','polypolish','samtools','bwa','quast','seqkit','multiqc']:
+        for name in ['unicycler','spades','flye','nxtrim','fastp','racon','medaka','polypolish','samtools','bwa','quast','seqkit','multiqc']:
             print(name+' 1.0 fixture')
     else: print('name: fixture\ndependencies: []')
 elif tool == 'pigz':
@@ -70,8 +70,12 @@ elif tool == 'fastp':
 elif tool == 'filtlong':
     with gzip.open(args[-1],'rb') as handle: sys.stdout.buffer.write(handle.read())
 elif tool == 'kraken2':
-    write(arg('--report'),'100\t2\t2\tG\t11\tExample\n')
-    print('C\tfixture\t11\t4\t11:4')
+    inputs = [p for p in args if p.endswith(('.fq.gz', '.fastq.gz'))]
+    with gzip.open(inputs[0], 'rt') as handle:
+        lines = handle.read().splitlines()
+    ids = [lines[i][1:].split()[0].removesuffix('/1') for i in range(0, len(lines), 4)]
+    write(arg('--report'), f'100\t{len(ids)}\t{len(ids)}\tG\t11\tExample\n')
+    for name in ids: print(f'C\t{name}\t11\t4\t11:4')
 elif tool == 'extract_kraken_reads.py':
     for src,dst in [('-s1','-o'),('-s2','-o2'),('-s','-o')]:
         if src in args:
@@ -84,7 +88,12 @@ elif tool == 'spades.py':
     assert dataset and '-m' in args and '-t' in args and arg('--phred-offset') == '33'
     names=set()
     for lib in dataset:
-        assert lib['type']=='paired-end' and lib['orientation']=='fr'
+        assert lib['type'] in {'paired-end', 'mate-pairs', 'single', 'nanopore'}
+        if 'single reads' in lib or 'interlaced reads' in lib:
+            for path in lib.get('single reads', lib.get('interlaced reads', [])):
+                assert records(path)
+            continue
+        assert lib['orientation'] in {'fr', 'rf', 'ff'}
         assert len(lib['left reads'])==len(lib['right reads'])==1
         ids=[]
         for path in [lib['left reads'][0],lib['right reads'][0]]:
@@ -94,6 +103,19 @@ elif tool == 'spades.py':
         assert ids[0]==ids[1] and not names.intersection(ids[0])
         names.update(ids[0])
     write(Path(arg('-o'))/'contigs.fasta','>short\nACGT\n>fixture\n'+'C'*1200+'\n')
+elif tool == 'flye':
+    assert ('--pacbio-hifi' in args) != ('--pacbio-raw' in args)
+    assert arg('--iterations') == '1'
+    write(Path(arg('--out-dir'))/'assembly.fasta', '>fixture\n'+'G'*1200+'\n')
+    write(Path(arg('--out-dir'))/'assembly_info.txt', '# synthetic contract\n')
+elif tool == 'nxtrim':
+    assert '--rf' in args
+    with gzip.open(arg('-1'), 'rt') as f: left=f.read().splitlines(keepends=True)
+    with gzip.open(arg('-2'), 'rt') as f: right=f.read().splitlines(keepends=True)
+    paired=''.join(''.join(left[i:i+4]+right[i:i+4]) for i in range(0,len(left),4))
+    for category in ['mp', 'pe', 'unknown', 'se']:
+        path=Path(arg('-O')+'.'+category+'.fastq.gz');path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_bytes(gzip.compress((paired if category=='mp' else '').encode()))
 elif tool == 'minimap2': print('fixture\t4\t0\t4\t+\tfixture\t1200\t0\t4\t4\t4\t60')
 elif tool == 'racon': sys.stdout.write(extend(args[-1],'C'))
 elif tool == 'medaka_consensus': write(Path(arg('-o'))/'consensus.fasta',extend(arg('-d'),'G'))

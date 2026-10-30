@@ -86,7 +86,7 @@ def _path(value, base_dir, seen, where):
 
 def _library(value, base_dir, seen_files, where):
     _object(value, ("library_id", "platform", "read_groups"),
-            ("library_type", "orientation", "insert_size_bp", "chemistry"), where)
+            ("library_type", "orientation", "insert_size_bp", "chemistry", "preprocessing"), where)
     out = deepcopy(value)
     _identifier(out["library_id"], f"{where}.library_id")
     platform = _choice(out["platform"], ("illumina", "ont", "pacbio"), f"{where}.platform")
@@ -95,10 +95,14 @@ def _library(value, base_dir, seen_files, where):
         _choice(out.get("orientation"), ("fr", "rf", "ff"), f"{where}.orientation")
         if "chemistry" in out:
             _error(where, "chemistry is only used for PacBio in schema v1")
+        if "preprocessing" in out:
+            _choice(out["preprocessing"], ("fastp", "pretrimmed", "nextera_mate_pair"), f"{where}.preprocessing")
+            if out["preprocessing"] == "nextera_mate_pair" and (out["library_type"] != "mate_pair" or out["orientation"] != "rf"):
+                _error(where, "Nextera mate-pair preprocessing requires mate_pair/rf input")
         if "insert_size_bp" in out and (type(out["insert_size_bp"]) is not int or out["insert_size_bp"] <= 0):
             _error(where, "insert_size_bp must be a positive integer")
     else:
-        if any(key in out for key in ("library_type", "orientation", "insert_size_bp")):
+        if any(key in out for key in ("library_type", "orientation", "insert_size_bp", "preprocessing")):
             _error(where, "paired-library fields are only valid for Illumina")
         if platform == "pacbio":
             _choice(out.get("chemistry"), ("hifi", "clr"), f"{where}.chemistry")

@@ -1,3 +1,5 @@
+> This page describes the original FR adapter. See [PLATFORM_EXECUTION.md](PLATFORM_EXECUTION.md) for the expanded execution matrix and preparation options.
+
 # HybAs AWARE 10.0.0a1 — Illumina library execution
 
 **Experimental development adapter, unreleased.** This is software integration,
@@ -12,8 +14,8 @@ not qualification of assembly accuracy. It belongs to draft PR #4 and the
 | Repeated lanes/runs of one FR paired-end preparation | Preserve read groups, trim together within that library |
 | Independent FR paired-end preparations | Trim separately; separate SPAdes dataset entries |
 | Complementary FR paired-end preparations with distinct declared insert sizes | Separate dataset entries ordered by declared insert size |
-| Mate-pair, RF or FF orientation | Preflight error; preprocessing not qualified |
-| ONT or PacBio manifest modes | Preflight error; separate adapters pending |
+| Mate-pair, RF or FF orientation | Explicit preprocessing required; see expanded guide |
+| ONT or PacBio manifest modes | Supported by separate platform adapters; see expanded guide |
 
 Legacy folder/sample-sheet runs continue to use the existing Unicycler path.
 Do not put independent preparations into a legacy raw folder and assume their
@@ -103,9 +105,9 @@ on deterministic random toy reads. These checks establish software contracts,
 not biological accuracy or suitability for a particular organism/preparation.
 
 Representative benign reference-data qualification remains a release gate.
-Mate-pair junction processing, other orientations, PacBio HiFi/CLR adapters,
-special preparation protocols, Bactologix controls and release registration are
-separate work. The standalone manifest validator deliberately still reports
+Mate-pair junction processing, other declared orientations and PacBio HiFi/CLR
+adapters are now implemented; see the expanded guide. Special preparation
+protocols and release registration require separate qualification. The standalone manifest validator deliberately still reports
 `execution_ready: false`; metadata validity alone never certifies an executable
 or scientifically qualified route.
 

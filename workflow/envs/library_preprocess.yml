@@ -1,0 +1,8 @@
+name: hybas-library-preprocess
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - fastp=1.1.0
+  - nxtrim=0.4.3
