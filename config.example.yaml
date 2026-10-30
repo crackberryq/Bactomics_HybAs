@@ -1,24 +1,32 @@
 # HybAs workstation configuration template (copy to config.yaml; do not commit local paths)
 base_dir: ..
 sample_sheet: samples.tsv
-threads: 8
+# Experimental platform/library adapters; see docs/PLATFORM_EXECUTION.md.
+# With a manifest, use sample_sheet: '' or a sheet containing exactly its samples.
+input_manifest: ''
+# Auto resolves supported controls once; explicit values override it.
+# Paths, identifiers and scientific thresholds remain explicit.
+run_mode: auto
+threads: auto
+total_mem_mb: auto
+settings_revision: ''
 keep_percent: 95
 racon_rounds: 2
 busco_lineage: bacteria_odb10
 medaka_model: ''
 target_taxid: ''
-run_kraken: true
-run_busco: true
-run_prokka: true
-run_multiqc: true
-run_polypolish: true
+run_kraken: auto
+run_busco: auto
+run_prokka: auto
+run_multiqc: auto
+run_polypolish: auto
 setup_only: false
 admin_mode: false
 ci_mode: false
 allow_ont_only: true
 allow_illumina_only: true
 require_target_taxid_for_kraken: false
-polish_mode: tripolish
+polish_mode: auto
 workflow_version: HybAs-9.0.0-AWARE
 db_root: db
 kraken_db_name: kraken2_std_db
@@ -31,7 +39,10 @@ kraken_aware_delta_min_percent: 20.0
 kraken_aware_moderate_delta_min_percent: 10.0
 kraken_aware_high_target_min_percent: 95.0
 kraken_aware_moderate_target_min_percent: 80.0
-assembly_mem_mb: 8192
-spades_memory_gb: 8
-polishing_mem_mb: 4096
+assembly_mem_mb: auto
+spades_memory_gb: auto
+polishing_mem_mb: auto
+kraken_mem_mb: auto
+busco_mem_mb: auto
+prokka_mem_mb: auto
 min_fasta_length: 1000

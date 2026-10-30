@@ -3,7 +3,7 @@ message: >-
   If you use HybAs Aware, please cite the software repository using the
   metadata below. Update this file later to point to the associated paper
   once it is publicly available.
-title: "HybAs 9.0.0-AWARE"
+title: "HybAs AWARE 10.0.0a1 — Alpha"
 type: software
 abstract: >-
   Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
@@ -24,5 +24,4 @@ keywords:
   - "genome analysis"
   - "nanopore"
   - "Illumina"
-version: "9.0.0-AWARE"
-date-released: "2026-10-19"
+version: "10.0.0a1"

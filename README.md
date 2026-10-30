@@ -1,12 +1,28 @@
-# HybAs 9.0.0-AWARE
+# HybAs AWARE
 
 [![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
+**Development target: 10.0.0a1 — Alpha (unreleased).** See the
+[release status](docs/RELEASE_10.0.0a1.md) and
+[BaSIS-aligned update conventions](docs/RELEASE_CONVENTIONS.md).
+
+**v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)
+adds standalone metadata validation for the proposed sequencing modes, plus an
+experimental [library-aware execution adapters](docs/PLATFORM_EXECUTION.md).
+They preserve preparation identity and support declared Illumina orientations,
+Nextera mate-pair processing, ONT, PacBio HiFi/CLR, and supported hybrid inputs.
+Software checks do not establish biological accuracy. The offline research
+report includes per-platform read reconciliation and assembly provenance.
+This development branch pins Snakemake 9.27.1; legacy input layouts retain their
+existing Unicycler route.
+Supported run controls now [default to Auto](docs/AUTO_SETTINGS.md), with
+explicit overrides and saved settings for consistent resumes.
+
 HybAs is a native Snakemake workflow for hybrid, Illumina-only and ONT-only bacterial assembly, with taxon-aware read handling, optional polishing, QC and provenance. Run `Hybas.smk` directly. Snakemake creates and activates the rule environments; there is no HybAs Python package to install.
 
-This release fixes execution and reporting defects in the v8.8 source (`b14ff7688b72f1ae4a39bd99a4305d16a0e53ec1`). See [CHANGELOG.md](CHANGELOG.md) for behavior changes and validation limits. Preserve the old checkout and outputs when comparing versions.
+The v9 baseline fixes execution and reporting defects in the v8.8 source (`b14ff7688b72f1ae4a39bd99a4305d16a0e53ec1`). The usage guide below describes those existing routes. See [CHANGELOG.md](CHANGELOG.md) for behavior changes and validation limits. Preserve the old checkout and outputs when comparing versions.
 
 ## Install
 
@@ -24,7 +40,7 @@ cp examples/samples.example.tsv samples.tsv
 snakemake -s Hybas.smk setup_envs --use-conda --cores 4 --config setup_only=true
 ```
 
-`environment.yaml` provides Python 3.11, Snakemake 9.6.2 and YAML support. Rule environments are in `workflow/envs/`. Their post-deployment checks fail if required executables are missing or resolve outside the managed environment. Optional Medaka, Polypolish and annotation environments are selected only when needed by the run (or requested during setup).
+`environment.yaml` on this development branch provides Python 3.11, Snakemake 9.27.1 and YAML support. The production v9 branch still pins its original runner. Rule environments are in `workflow/envs/`. Their post-deployment checks fail if required executables are missing or resolve outside the managed environment. Optional Medaka, Polypolish and annotation environments are selected only when needed by the run (or requested during setup).
 
 An existing environment can be updated with `conda env update -n hybas -f environment.yaml`. Keep your workstation configuration and sample sheet when upgrading; compare them with the new examples instead of overwriting them.
 
@@ -72,15 +88,15 @@ If neither mate has mapped alignments, Polypolish records an explicit skip and r
 
 ## Resources
 
-Edit `profiles/default/config.yaml` to fit the RAM available to Linux/WSL. Its initial total scheduling budget is **16000 MB**, with **one concurrent Kraken job**. This is a scheduling budget, not an operating-system memory limit. Leave RAM for the operating system and database/cache overhead.
+Auto detects local Linux/WSL CPU and memory capacity, including affinity and container limits. It uses 80% of the memory limit, with **one concurrent Kraken job**. Explicit `--cores` and `--resources mem_mb=...` remain ceilings; `total_mem_mb` can specify a manual budget. These are scheduling budgets, not operating-system memory limits. See [Auto settings](docs/AUTO_SETTINGS.md) for per-stage allocations and frozen resume behavior.
 
-- `assembly_mem_mb`: assembly job reservation, default 8192.
-- `spades_memory_gb`: SPAdes memory argument forwarded by Unicycler, default 8; must fit the assembly reservation.
-- `polishing_mem_mb`: polishing/mapping reservation, default 4096.
+- `assembly_mem_mb`: Auto selects up to the existing 8192 MB reservation within the budget; explicit values override it.
+- `spades_memory_gb`: Auto fits the assembly reservation; an explicit SPAdes memory argument must also fit it.
+- `polishing_mem_mb`: Auto selects up to the existing 4096 MB reservation within the budget; explicit values override it.
 - `kraken_mem_mb`: optional explicit reservation. If omitted, HybAs estimates it from the Kraken core database files plus overhead. This estimate is not a measured peak.
 - `min_fasta_length`: Unicycler export threshold, default 1000.
 
-A large Kraken database can exceed the profile's example memory budget; size the budget and the database for your machine before running. HybAs rejects an assembly, Kraken or polishing reservation above that total before processing. Persistent Kraken processes/database reuse are not implemented in this release.
+A large Kraken database can exceed the resolved memory budget; size the budget and the database for your machine before running. HybAs rejects enabled assembly, Kraken, polishing, BUSCO or annotation reservations above that total before processing. Persistent Kraken processes/database reuse are not implemented in this release.
 
 ## Databases
 
@@ -126,6 +142,16 @@ Within each isolate directory:
 - `logs/` and `benchmarks/`: diagnostics and resource measurements.
 
 Global provenance is stored under `<base_dir>/provenance/`, including effective configuration, source hashes and deployed environment manifests. MultiQC explicitly depends on the custom summary and its configuration, so a summary refresh also refreshes the report.
+
+Computational recording is enabled for every execution on the v10 branch. All
+concrete rules have native benchmarks, and extended measurements are enabled even
+when using a custom profile. Each invocation retains its own hardware/runner
+record, job attempts, timings and available CPU, memory and I/O measurements under
+`provenance/runtime/computational_runs/<run-id>/`. Failed attempts and later resumes
+are kept separately; existing results are not counted as new computation.
+`provenance/runtime/computational_report.html` provides the combined history and
+is included in the Snakemake report. See [computational data](docs/COMPUTATIONAL_DATA.md)
+for fields, units and measurement limits.
 
 ```bash
 snakemake -s Hybas.smk --report hybas_report.html

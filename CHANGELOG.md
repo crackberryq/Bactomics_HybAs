@@ -1,5 +1,44 @@
 # Changelog
 
+## HybAs AWARE 10.0.0a1 — unreleased alpha target
+
+- Add an experimental FR paired-end library execution adapter. Audit and
+  namespace read pairs, keep preparations separate through fastp and SPAdes
+  4.3.0, and retain library/stage provenance and computational benchmarks.
+  Manifest content participates in frozen settings identity.
+- Extend execution to explicit pretrimmed RF/FF libraries, Nextera mate-pairs,
+  ONT manifests and separate PacBio HiFi/CLR paths. Preserve library identity
+  and platform-specific evidence; scientific qualification remains pending.
+- Generate the integrated research report with read-retention audits, actual
+  platform labels, input plans and computational-history links. See
+  `docs/PLATFORM_EXECUTION.md` for the supported input/preparation matrix.
+
+- Resolve supported run controls with Auto defaults while retaining explicit
+  overrides. Detect local CPU/memory limits, verify manual input modes and
+  retain existing processing presets and required-database checks.
+- Freeze resolved choices/reasons before execution, reuse them for unchanged
+  requests and retain earlier snapshots after explicit configuration edits.
+  Include selections in computational records, reports and provenance.
+- Adopt BaSIS-style product names, numeric prerelease versions, `v<version>`
+  tags and version-specific release documents for future updates.
+- Record completed work, pending execution/release integration and
+  release gates in `docs/RELEASE_10.0.0a1.md`. This documentation update does
+  not publish a release or change the v9 runtime/configuration contract.
+
+## v10 development — computational records
+
+- Enable extended native benchmarks for every concrete rule, including QC and provenance stages that previously had no benchmarks.
+- Persist a separate computational record for each execution invocation, including hardware/runner details, requested resources, UTC timestamps, job attempts, available resource measurements and raw benchmark archives.
+- Preserve failures, retries, resumes and no-work invocations; never reuse an old benchmark as a new measurement. Missing metrics remain null/NA.
+- Include the computational history in Snakemake reports and provide JSON/TSV exports. Run elapsed time is separate from summed CPU time and the largest individual job RSS peak.
+- Bactologix 0.1.0a17 automatic release-specific runner preparation is now published.
+
+## v10 development — runner compatibility
+
+- Pin the development runner and regression CI to Snakemake 9.27.1, retaining Python 3.11 in the Conda recipe.
+- Accept newer Snakemake resource objects in the existing memory-budget check, retaining the earlier scalar representation and the same reservation limits.
+- Document release-specific automatic runner preparation in Bactologix 0.1.0a17. New multi-platform manifests remain metadata-only until their execution adapters are qualified.
+
 ## Unreleased — package layout only
 
 - Group rule environments, report captions, helper code, scripts and MultiQC configuration under `workflow/`.

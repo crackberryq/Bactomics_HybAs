@@ -4,6 +4,6 @@ channels:
   - bioconda
 dependencies:
   - python=3.11
-  - snakemake-minimal=9.6.2
+  - snakemake-minimal=9.27.1
   - pyyaml
   - pip

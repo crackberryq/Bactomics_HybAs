@@ -1,0 +1,113 @@
+# METADATA EXAMPLE ONLY: these files do not exist and no assemblies are launched.
+# Paths are relative to this manifest, not the shell's working directory.
+# Copy to inputs.local.yaml before editing; *.local.yaml is already gitignored.
+schema_version: 1
+samples:
+  - sample_id: example_illumina
+    mode: illumina_only
+    libraries:
+      - library_id: pe1
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        read_groups:
+          - {read_group_id: lane1, run_id: run1, lane_id: L001, r1: reads/illumina_R1.fq.gz, r2: reads/illumina_R2.fq.gz}
+
+  - sample_id: example_dual_runs
+    mode: dual_illumina_runs
+    libraries:
+      - library_id: pe1
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        read_groups:
+          - {read_group_id: run1_lane1, run_id: run1, lane_id: L001, r1: reads/dual_a_R1.fq.gz, r2: reads/dual_a_R2.fq.gz}
+          - {read_group_id: run2_lane1, run_id: run2, lane_id: L001, r1: reads/dual_b_R1.fq.gz, r2: reads/dual_b_R2.fq.gz}
+
+  - sample_id: example_complementary
+    mode: dual_illumina_complementary
+    libraries:
+      - library_id: short_insert
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        insert_size_bp: 350  # Illustrative metadata, not a recommended setting.
+        read_groups:
+          - {read_group_id: rg1, run_id: run1, r1: reads/short_R1.fq.gz, r2: reads/short_R2.fq.gz}
+      - library_id: long_insert
+        platform: illumina
+        library_type: mate_pair
+        orientation: rf
+        insert_size_bp: 3000  # Declare the actual library metadata.
+        read_groups:
+          - {read_group_id: rg1, run_id: run2, r1: reads/long_R1.fq.gz, r2: reads/long_R2.fq.gz}
+
+  - sample_id: example_ont
+    mode: ont_only
+    libraries:
+      - library_id: ont1
+        platform: ont
+        read_groups:
+          - {read_group_id: rg1, run_id: run1, reads: reads/ont.fq.gz}
+
+  - sample_id: example_illumina_ont
+    mode: illumina_ont
+    libraries:
+      - library_id: pe1
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        read_groups:
+          - {read_group_id: rg1, run_id: run1, r1: reads/hybrid_ont_R1.fq.gz, r2: reads/hybrid_ont_R2.fq.gz}
+      - library_id: ont1
+        platform: ont
+        read_groups:
+          - {read_group_id: rg1, run_id: run2, reads: reads/hybrid_ont.fq.gz}
+
+  - sample_id: example_hifi
+    mode: pacbio_only
+    libraries:
+      - library_id: pb1
+        platform: pacbio
+        chemistry: hifi
+        read_groups:
+          - {read_group_id: rg1, run_id: run1, reads: reads/hifi.fq.gz}
+
+  - sample_id: example_clr
+    mode: pacbio_only
+    libraries:
+      - library_id: pb1
+        platform: pacbio
+        chemistry: clr
+        read_groups:
+          - {read_group_id: rg1, run_id: run1, reads: reads/clr.fq.gz}
+
+  - sample_id: example_illumina_hifi
+    mode: illumina_pacbio
+    libraries:
+      - library_id: pe1
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        read_groups:
+          - {read_group_id: rg1, run_id: run1, r1: reads/hybrid_hifi_R1.fq.gz, r2: reads/hybrid_hifi_R2.fq.gz}
+      - library_id: pb1
+        platform: pacbio
+        chemistry: hifi
+        read_groups:
+          - {read_group_id: rg1, run_id: run2, reads: reads/hybrid_hifi.fq.gz}
+
+  - sample_id: example_illumina_clr
+    mode: illumina_pacbio
+    libraries:
+      - library_id: pe1
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        read_groups:
+          - {read_group_id: rg1, run_id: run1, r1: reads/hybrid_clr_R1.fq.gz, r2: reads/hybrid_clr_R2.fq.gz}
+      - library_id: pb1
+        platform: pacbio
+        chemistry: clr
+        read_groups:
+          - {read_group_id: rg1, run_id: run2, reads: reads/hybrid_clr.fq.gz}

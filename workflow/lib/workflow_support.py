@@ -9,7 +9,7 @@ import re
 import shutil
 from pathlib import Path
 
-VERSION = "HybAs-9.0.0-AWARE"
+VERSION = "HybAs-AWARE-10.0.0a1"
 
 
 def normalize_taxid(value):
@@ -86,7 +86,7 @@ def polish_plan(mode, requested, rounds, polypolish):
         stages += [f"racon{i}" for i in range(1, rounds + 1)]
         if requested in {"medaka", "tripolish"}:
             stages.append("medaka")
-    if mode in {"hybrid", "illumina_only"} and requested == "tripolish" and polypolish:
+    if mode in {"hybrid", "illumina_only", "illumina_pacbio"} and requested == "tripolish" and polypolish:
         stages.append("polypolish")
     return stages
 

@@ -1,0 +1,8 @@
+name: hybas-library-assembly
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - spades=4.3.0
+  - pigz=2.8
