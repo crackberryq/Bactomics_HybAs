@@ -24,5 +24,6 @@ keywords:
   - "genome analysis"
   - "nanopore"
   - "Illumina"
-version: "9.0.0-AWARE"
+version: "9.0.1-AWARE"
 date-released: "2026-10-19"
+

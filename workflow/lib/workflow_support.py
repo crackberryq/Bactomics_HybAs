@@ -9,7 +9,7 @@ import re
 import shutil
 from pathlib import Path
 
-VERSION = "HybAs-9.0.0-AWARE"
+VERSION = "HybAs-9.0.1-AWARE"
 
 
 def normalize_taxid(value):
@@ -162,3 +162,4 @@ def write_json(path, value):
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
     temporary.replace(path)
+

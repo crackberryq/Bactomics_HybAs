@@ -1,3 +1,13 @@
+## HybAs AWARE 9.0.1
+
+The primary assembly report now uses the Bactomics visual design: navy sidebar, assembly overview, separate read-retention panels, AWARE target and platform-cleaning evidence, recorded polishing route, genome quality, annotation counts and methods/provenance.
+
+New runs write `reports/hybas/report.html`, `reports/hybas/results.json` (schema `hybas-report-1`) and `reports/hybas/methods.txt` per isolate. The report rule depends on existing analysis outputs and executes no analysis tools. MultiQC remains available in its original location as a detailed tool report.
+
+The standalone renderer accepts the saved bundle or a legacy `metadata/run_summary.json`. Bactologix a81 exposes report-only regeneration using this installed renderer; it saves a separate edition and preserves original results. Legacy summaries display available metrics and mark uncaptured details unavailable.
+
+No AWARE selection, cleaning or confidence policy is changed. No circularity or stage-quality improvement is inferred where it was not recorded. Read-count charts keep Illumina mates and ONT separate. BUSCO uses the recorded lineage; coverage remains explicitly a base-count estimate. Downloads include saved report evidence and a methods draft for researcher review.
+
 # Changelog
 
 ## Unreleased — package layout only
@@ -39,3 +49,4 @@ Default AWARE target election, independent platform actions and conservative con
 Polished FASTA may change because the Polypolish input defect is corrected. Illumina-only output can now be polished. Do not assume byte-for-byte assembly equivalence with v8.8. Keep old checkouts, configurations and outputs for comparison.
 
 The new software tests use synthetic fixtures and mocked external tool contracts. They test orchestration, not assembly accuracy. Historical phase 1–3 validation assets are not bundled or recreated. Real-tool biological comparisons, persistent Kraken reuse and new assembly-selection policies are outside the completed validation scope.
+

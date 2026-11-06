@@ -83,6 +83,9 @@ def test_end_to_end_routes(tmp_path,mode,polish,pp,expected,stages):
     text=(tmp_path/'sample/work/final/assembly.final.fasta').read_text().strip()
     assert text.endswith(expected)
     summary=json.loads((tmp_path/'sample/metadata/run_summary.json').read_text())
+    assert (tmp_path/'sample/reports/hybas/report.html').is_file()
+    bundle=json.loads((tmp_path/'sample/reports/hybas/results.json').read_text())
+    assert bundle['schema_version']=='hybas-report-1' and bundle['summary']==summary
     assert summary['executed_stages']==stages
     assert float(summary['quast_n50'])>0
     assert summary['final_source_stage']==(stages[-1] if stages else 'unicycler')
@@ -163,3 +166,4 @@ def test_oversized_reservation_blocks_before_processing(tmp_path):
     result=run(tmp_path,env,'-n',ok=False)
     assert 'scheduling budget' in result.stdout
     assert calls(tmp_path)==[]
+

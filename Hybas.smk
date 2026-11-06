@@ -1169,7 +1169,8 @@ rule all:
         expand(prokka_gff("{isolate}"), isolate=SAMPLES),
         expand(prokka_faa("{isolate}"), isolate=SAMPLES),
         expand(multiqc_html("{isolate}"), isolate=SAMPLES),
-        expand(multiqc_custom_tsv("{isolate}"), isolate=SAMPLES)
+        expand(multiqc_custom_tsv("{isolate}"), isolate=SAMPLES),
+        expand(os.path.join(reports_dir("{isolate}"), "hybas", "report.html"), isolate=SAMPLES)
 
 ###############################################################################
 # SECTION 5 — INPUT DISCOVERY
@@ -3774,3 +3775,28 @@ rule multiqc_custom_content:
 ###############################################################################
 
 ruleorder: final_copy > unicycler
+
+
+# Branded reporting reads finished outputs and never invokes analysis tools.
+rule hybas_report:
+    input:
+        summary=run_summary_json("{isolate}"),
+        decision=kraken_decision_tsv("{isolate}"),
+        qc=qc_assessment_tsv("{isolate}"),
+        tools=tool_versions_tsv("{isolate}"),
+        config=workflow_provenance_tsv("{isolate}"),
+        system=system_info_tsv("{isolate}"),
+        checksums=checksums_tsv("{isolate}"),
+        skip=skip_reasons_tsv("{isolate}"),
+        gff=prokka_gff("{isolate}"),
+        multiqc=multiqc_html("{isolate}")
+    params:
+        renderer=sha256_file(os.path.join(SOURCE_ROOT, "workflow", "lib", "hybas_report.py")),
+        styles=sha256_file(os.path.join(SOURCE_ROOT, "workflow", "lib", "hybas_report_assets.py"))
+    output:
+        html=os.path.join(reports_dir("{isolate}"), "hybas", "report.html"),
+        json=os.path.join(reports_dir("{isolate}"), "hybas", "results.json"),
+        methods=os.path.join(reports_dir("{isolate}"), "hybas", "methods.txt")
+    run:
+        from hybas_report import write_report
+        write_report(iso_dir(wildcards.isolate), os.path.dirname(output.html))

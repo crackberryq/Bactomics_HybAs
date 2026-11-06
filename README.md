@@ -1,3 +1,5 @@
+> **Branded report update:** [HybAs AWARE 9.0.1](docs/releases/v9.0.1-AWARE.md) adds a primary assembly report and saved-data rendering. MultiQC remains available.
+
 # HybAs 9.0.0-AWARE
 
 [![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -164,3 +166,4 @@ See [CITATION.cff](CITATION.cff) for citation metadata and [LICENSE](LICENSE) fo
 The default branch may remain on a historical version until the repository owner changes it in **Settings → General → Default branch**. For v9.0, use the explicitly versioned branch shown in the clone command. The current CI checks validate software orchestration with mocks; they do not substitute for real-tool assembly qualification.
 
 Repository contributors should use feature branches and pull requests; see [CONTRIBUTING](.github/CONTRIBUTING.md) and [SECURITY](SECURITY.md). Release notes for this version are in [docs/releases/v9.0.0-AWARE.md](docs/releases/v9.0.0-AWARE.md). To publish a GitHub Release, create a tag at the validated commit and publish it from the Releases page after CI passes.
+
