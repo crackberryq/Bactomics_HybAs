@@ -70,3 +70,7 @@ and [RELEASE_CONVENTIONS.md](RELEASE_CONVENTIONS.md) for the detailed contracts.
 The development branch now incorporates regular AWARE 9.0.2. Optional identification review stops after Kraken for legacy and manifest inputs, including PacBio. Continuation uses the saved Auto resource resolution, verifies evidence and input identities, and records the explicit target decision separately. PacBio reports retain their platform identity and Flye assembly route. AWARE+ remains a separate draft.
 
 Qualification and publication remain separate release gates. Software-fixture tests do not establish biological assembly accuracy.
+
+## Unified AWARE development integration
+
+See [AWARE outputs](AWARE_OUTPUTS.md) for the optional endpoint, read preservation, portable derived-sample manifests and assignment-support statistics. Defaults retain regular AWARE behaviour. This remains development code pending validation and release qualification.

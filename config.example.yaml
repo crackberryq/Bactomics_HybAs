@@ -33,6 +33,10 @@ kraken_db_name: kraken2_std_db
 kraken_decision_mode: aware
 # Stop after classification and save a report for explicit target review.
 kraken_review_before_filtering: false
+# One AWARE module: existing behaviour remains the default.
+aware_run_until: assembly  # assembly | aware
+aware_preserve_groups: false
+aware_statistics: false
 kraken_auto_passthrough_min_percent: 95.0
 kraken_auto_use_both_platforms: true
 kraken_include_children: true

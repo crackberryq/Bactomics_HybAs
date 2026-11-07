@@ -80,7 +80,7 @@ report: "workflow/report/workflow.rst"
 # Resolve before constructing rule parameters. Child jobs reuse the controller's
 # frozen record; parsing/dry runs only preview and never write a settings file.
 REQUESTED_CONFIG = json.dumps(config, sort_keys=True, default=str)
-REVIEW_ARGUMENTS = {k: config[k] for k in ("kraken_review_decision", "kraken_review_decision_sha256") if k in config}
+REVIEW_ARGUMENTS = {k: config[k] for k in ("kraken_review_decision", "kraken_review_decision_sha256", "aware_assembly_continuation", "aware_assembly_continuation_sha256") if k in config}
 SETTINGS = SettingsResolution({k: v for k, v in config.items() if k not in REVIEW_ARGUMENTS},
     cores=resource_value(workflow.global_resources, "_cores"),
     mem_mb=resource_value(workflow.global_resources, "mem_mb"))
@@ -128,6 +128,15 @@ REVIEW_ENABLED = as_bool(config.get("kraken_review_before_filtering", False))
 REVIEW_DECISION_PATH = str(config.get("kraken_review_decision", ""))
 REVIEW_DECISION = review_support.load_decision(REVIEW_DECISION_PATH, config.get("kraken_review_decision_sha256")) if REVIEW_DECISION_PATH else None
 REVIEW_WAITING = REVIEW_ENABLED and REVIEW_DECISION is None
+AWARE_UNTIL = str(config.get("aware_run_until", "assembly"))
+if AWARE_UNTIL not in {"assembly", "aware"}:
+    raise ValueError("aware_run_until must be assembly or aware")
+AWARE_PRESERVE = as_bool(config.get("aware_preserve_groups", False))
+AWARE_STATISTICS = as_bool(config.get("aware_statistics", False))
+AWARE_CONTINUATION = str(config.get("aware_assembly_continuation", ""))
+AWARE_OUTPUTS = AWARE_UNTIL == "aware" or AWARE_PRESERVE or AWARE_STATISTICS
+AWARE_STOPPING = AWARE_UNTIL == "aware" and not AWARE_CONTINUATION
+ASSEMBLY_PENDING = REVIEW_WAITING or AWARE_STOPPING
 
 ALLOW_ONT_ONLY           = as_bool(config.get("allow_ont_only", True))
 ALLOW_ILLUMINA_ONLY      = as_bool(config.get("allow_illumina_only", True))
@@ -164,8 +173,8 @@ VALID_KRAKEN_DECISION_MODES = {"off", "manual", "auto", "aware"}
 # - manual -> Kraken runs
 # - auto   -> Kraken runs
 # - aware  -> Kraken runs
-if REVIEW_ENABLED and (not RUN_KRAKEN or KRAKEN_DECISION_MODE == "off"):
-    raise ValueError("Pause after identification requires Kraken to be enabled")
+if (REVIEW_ENABLED or AWARE_OUTPUTS) and (not RUN_KRAKEN or KRAKEN_DECISION_MODE == "off"):
+    raise ValueError("AWARE output and identification review require Kraken to be enabled")
 if REVIEW_DECISION is not None:
     if not REVIEW_ENABLED:
         raise ValueError("An identification decision requires review mode")
@@ -1198,10 +1207,11 @@ AWARE_CODE_HASH = hashlib.sha256("\n".join(_controller_blocks).encode()).hexdige
 
 rule all:
     input:
-        lambda wc: expand(os.path.join(reports_dir("{isolate}"), "identification", "review.json"), isolate=SAMPLES) + expand(os.path.join(reports_dir("{isolate}"), "identification", "report.html"), isolate=SAMPLES) if REVIEW_WAITING else [p for item in rules.assembly_all.input for p in (item(wc) if callable(item) else [item])]
+        lambda wc: expand(os.path.join(reports_dir("{isolate}"), "identification", "review.json"), isolate=SAMPLES) + expand(os.path.join(reports_dir("{isolate}"), "identification", "report.html"), isolate=SAMPLES) if REVIEW_WAITING else (expand(os.path.join(reports_dir("{isolate}"), "aware"), isolate=SAMPLES) if AWARE_STOPPING else [p for item in rules.assembly_all.input for p in (item(wc) if callable(item) else [item])])
 
 rule assembly_all:
     input:
+        expand(os.path.join(reports_dir("{isolate}"), "aware"), isolate=SAMPLES) if AWARE_OUTPUTS else [],
         expand(os.path.join(reports_dir("{isolate}"), "hybas_research"), isolate=SAMPLES),
         [pacbio_metrics(i) for i in PACBIO_SAMPLES],
         [os.path.join(reports_dir(i), "nanoplot_pacbio") for i in PACBIO_SAMPLES],
@@ -1333,7 +1343,7 @@ if not SETUP_ONLY and not ADMIN_MODE:
         if not REVIEW_WAITING and KRAKEN_DECISION_MODE == "manual" and REQUIRE_TAXID_FOR_KRAKEN and not taxid:
             raise ValueError(f"{iso}: Kraken manual mode requires target_taxid but none was provided")
 
-        if not REVIEW_WAITING and RUN_BUSCO and not busco_db_ready(lineage):
+        if not ASSEMBLY_PENDING and RUN_BUSCO and not busco_db_ready(lineage):
             raise ValueError(
                 f"{iso}: BUSCO lineage database '{lineage}' missing at {busco_lineage_dir(lineage)}. "
                 f"Run: snakemake -s Hybas.smk download_busco_db --use-conda --config admin_mode=true"
@@ -1349,11 +1359,11 @@ if not SETUP_ONLY and not ADMIN_MODE:
     budget = workflow.global_resources.get("mem_mb")
     # Newer Snakemake exposes Resource objects; older releases use scalars.
     budget = getattr(budget, "value", budget)
-    reservations = {} if REVIEW_WAITING else {"assembly": ASSEMBLY_MEM_MB}
+    reservations = {} if ASSEMBLY_PENDING else {"assembly": ASSEMBLY_MEM_MB}
     if KRAKEN_PROFILE_ENABLED: reservations["kraken"] = KRAKEN_MEM_MB
-    if not REVIEW_WAITING and any(planned_stages(i) for i in SAMPLES): reservations["polishing"] = POLISH_MEM_MB
-    if not REVIEW_WAITING and RUN_BUSCO: reservations["busco"] = rule_memory("busco", 4096)
-    if not REVIEW_WAITING and RUN_PROKKA: reservations["prokka"] = rule_memory("prokka", 4096)
+    if not ASSEMBLY_PENDING and any(planned_stages(i) for i in SAMPLES): reservations["polishing"] = POLISH_MEM_MB
+    if not ASSEMBLY_PENDING and RUN_BUSCO: reservations["busco"] = rule_memory("busco", 4096)
+    if not ASSEMBLY_PENDING and RUN_PROKKA: reservations["prokka"] = rule_memory("prokka", 4096)
     if budget is not None:
         for stage, needed in reservations.items():
             if needed > int(budget):
@@ -1394,15 +1404,26 @@ SETTINGS.set_sample_plans({iso: {
 # Review context is independent of the eventual selected target. Raw reads and
 # database identity use the same metadata contract as the ordinary workflow.
 REVIEW_CONTEXT = None
-if REVIEW_ENABLED and not (SETUP_ONLY or ADMIN_MODE):
-    if len(SAMPLES) != 1:
+if (REVIEW_ENABLED or AWARE_OUTPUTS) and not (SETUP_ONLY or ADMIN_MODE):
+    if REVIEW_ENABLED and len(SAMPLES) != 1:
         raise ValueError("Identification review requires one sample per run; create separate reviewed runs for a batch")
     REVIEW_CONTEXT = review_support.context(config,
-        SOURCE_FILES + SAMPLE_FILES + [os.path.join(SOURCE_ROOT, "workflow/lib/identification_review.py")], SAMPLE_SHEET,
+        SOURCE_FILES + SAMPLE_FILES + [os.path.join(SOURCE_ROOT, "workflow/lib/" + name) for name in ("identification_review.py", "aware_bundle.py", "aware_preservation.py", "aware_statistics.py")], SAMPLE_SHEET,
         [file_identity(p) for iso in SAMPLES for p in illumina_r1_files(iso) + illumina_r2_files(iso) + nanopore_files(iso) + manifest_long_files(iso, "pacbio")],
         [file_identity(p) for p in DB_CORE])
     if REVIEW_DECISION is not None:
         review_support.verify_decision(REVIEW_DECISION, REVIEW_CONTEXT, SAMPLES[0])
+
+if AWARE_CONTINUATION:
+    if AWARE_UNTIL != "aware" or len(SAMPLES) != 1 or REVIEW_WAITING:
+        raise ValueError("Assembly continuation requires a completed single-sample AWARE endpoint")
+    from aware_bundle import verify_continuation
+    verify_continuation(AWARE_CONTINUATION, config.get("aware_assembly_continuation_sha256"), REVIEW_CONTEXT, SAMPLES[0])
+
+def assembly_authorization(wc):
+    if AWARE_STOPPING:
+        raise ValueError("Stop after AWARE is selected. Use an explicit verified assembly continuation.")
+    return review_authorization(wc)
 
 def review_authorization(wc):
     if REVIEW_WAITING:
@@ -2082,6 +2103,7 @@ rule flye_pacbio:
     wildcard_constraints:
         isolate=PACBIO_PATTERN
     input:
+        authorization=assembly_authorization,
         reads=clean_pacbio("{isolate}"), metrics=pacbio_metrics("{isolate}"), adapter=LIBRARY_ADAPTER
     output:
         bundle=directory(flye_outdir("{isolate}")), snapshot=stage_flye("{isolate}")
@@ -2234,6 +2256,7 @@ rule spades_libraries:
     wildcard_constraints:
         isolate=SPADES_PATTERN
     input:
+        authorization=assembly_authorization,
         libraries=library_trimmed("{isolate}"), adapter=LIBRARY_ADAPTER,
         ont=lambda wc: [filt_ont(wc.isolate)] if nanopore_files(wc.isolate) else [],
         dataset_builder=LONG_ADAPTER
@@ -3001,6 +3024,7 @@ rule unicycler:
     wildcard_constraints:
         isolate=UNICYCLER_PATTERN
     input:
+        authorization=assembly_authorization,
         ont=filt_ont("{isolate}"),
         r1=trim_r1("{isolate}"),
         r2=trim_r2("{isolate}"),
@@ -4497,4 +4521,30 @@ rule identification_review:
             reason=target["selection_reason"], actions={p: choose_platform_cleaning_decision("aware", target["selected_taxid"], target[("ont" if p == "pacbio" else p) + "_selected_pct"], p)[0] if present else "not_applicable" for p, present in active.items()})
         review_support.write_report(output.json, output.html, iso, REVIEW_CONTEXT,
             sorted(rows_by_id.values(), key=lambda x: (-max(x["illumina_pct"], x[long_name + "_pct"]), x["taxid"])),
-            recommendation, [input.illumina, input.ont, *input.assignments, *input.merged], KRAKEN_INCLUDE_CHILDREN, active)
+            recommendation, [input.illumina, input.ont, *input.assignments, *input.merged], KRAKEN_INCLUDE_CHILDREN, active, library_plan=MANIFEST_SAMPLES.get(iso), awaiting_review=REVIEW_ENABLED)
+
+
+rule aware_complete:
+    input:
+        review=os.path.join(reports_dir("{isolate}"), "identification", "review.json"),
+        decision=kraken_decision_tsv("{isolate}"),
+        cleaned=lambda wc: ([clean_r1(wc.isolate), clean_r2(wc.isolate)] if illumina_r1_files(wc.isolate) else []) +
+            ([clean_pacbio(wc.isolate)] if wc.isolate in PACBIO_SAMPLES else ([clean_ont_path(wc.isolate)] if nanopore_files(wc.isolate) else [])),
+        authorization=review_authorization
+    output:
+        directory(os.path.join(reports_dir("{isolate}"), "aware"))
+    params:
+        preservation=AWARE_PRESERVE, statistics=AWARE_STATISTICS,
+        source=lambda wc: hashlib.sha256("".join(Path(os.path.join(SOURCE_ROOT, "workflow/lib/" + name)).read_text() for name in ("aware_bundle.py", "aware_preservation.py", "aware_statistics.py")).encode()).hexdigest()
+    benchmark:
+        bench("{isolate}", "aware_complete")
+    run:
+        from aware_bundle import build
+        iso = wildcards.isolate
+        cleaned = {}
+        if illumina_r1_files(iso): cleaned["illumina"] = [clean_r1(iso), clean_r2(iso)]
+        if iso in PACBIO_SAMPLES: cleaned["pacbio"] = [clean_pacbio(iso)]
+        elif nanopore_files(iso): cleaned["ont"] = [clean_ont_path(iso)]
+        build(input.review, output[0], cleaned, input.decision, MANIFEST_SAMPLES.get(iso),
+              AWARE_PRESERVE, AWARE_STATISTICS,
+              lambda reports: choose_selected_kraken_target("aware", "", reports["illumina"], reports[long_platform(iso)]))

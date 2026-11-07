@@ -74,8 +74,13 @@ elif tool == 'kraken2':
     with gzip.open(inputs[0], 'rt') as handle:
         lines = handle.read().splitlines()
     ids = [lines[i][1:].split()[0].removesuffix('/1') for i in range(0, len(lines), 4)]
-    write(arg('--report'), f'100\t{len(ids)}\t{len(ids)}\tG\t11\tExample\n')
-    for name in ids: print(f'C\t{name}\t11\t4\t11:4')
+    write(arg('--report'), f'100\t{len(ids)}\t0\tR\t1\troot\n100\t{len(ids)}\t{len(ids)}\tG\t11\t  Example\n')
+    paired = '--paired' in args
+    for i, name in enumerate(ids):
+        length = len(lines[i*4+1])
+        lengths = f'{length}|{length}' if paired else str(length)
+        hits = '11:4 |:| 11:4' if paired else '11:4'
+        print(f'C\t{name}\t11\t{lengths}\t{hits}')
 elif tool == 'extract_kraken_reads.py':
     for src,dst in [('-s1','-o'),('-s2','-o2'),('-s','-o')]:
         if src in args:
