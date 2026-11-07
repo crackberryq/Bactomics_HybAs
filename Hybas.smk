@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs 9.0.0-AWARE (native Snakemake reliability update)
+# Snakefile – HybAs 9.0.2-AWARE (native Snakemake reliability update)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -55,6 +55,7 @@ sys.path.insert(0, os.path.join(SOURCE_ROOT, "workflow", "lib"))
 from workflow_support import (VERSION, normalize_taxid, manual_taxid, validate_isolate_names,
     pair_illumina_files, validate_input_files, polish_plan, busco_db_ready as valid_busco_db,
     file_identity, require_fasta, write_json, quast_metric as read_quast_metric)
+import identification_review as review_support
 from datetime import datetime
 from snakemake.io import report, directory, touch
 
@@ -94,6 +95,10 @@ RUN_POLYPOLISH           = as_bool(config.get("run_polypolish", True))
 SETUP_ONLY               = as_bool(config.get("setup_only", False))
 ADMIN_MODE               = as_bool(config.get("admin_mode", False))
 CI_MODE                  = as_bool(config.get("ci_mode", False))
+REVIEW_ENABLED = as_bool(config.get("kraken_review_before_filtering", False))
+REVIEW_DECISION_PATH = str(config.get("kraken_review_decision", ""))
+REVIEW_DECISION = review_support.load_decision(REVIEW_DECISION_PATH, config.get("kraken_review_decision_sha256")) if REVIEW_DECISION_PATH else None
+REVIEW_WAITING = REVIEW_ENABLED and REVIEW_DECISION is None
 
 ALLOW_ONT_ONLY           = as_bool(config.get("allow_ont_only", True))
 ALLOW_ILLUMINA_ONLY      = as_bool(config.get("allow_illumina_only", True))
@@ -130,6 +135,13 @@ VALID_KRAKEN_DECISION_MODES = {"off", "manual", "auto", "aware"}
 # - manual -> Kraken runs
 # - auto   -> Kraken runs
 # - aware  -> Kraken runs
+if REVIEW_ENABLED and (not RUN_KRAKEN or KRAKEN_DECISION_MODE == "off"):
+    raise ValueError("Pause after identification requires Kraken to be enabled")
+if REVIEW_DECISION is not None:
+    if not REVIEW_ENABLED:
+        raise ValueError("An identification decision requires review mode")
+    KRAKEN_DECISION_MODE = REVIEW_DECISION["mode"]
+    DEFAULT_TARGET_TAXID = REVIEW_DECISION["taxid"] if KRAKEN_DECISION_MODE == "manual" else ""
 KRAKEN_PROFILE_ENABLED = (KRAKEN_DECISION_MODE in {"manual", "auto", "aware"})
 
 
@@ -1123,6 +1135,10 @@ AWARE_CODE_HASH = hashlib.sha256("\n".join(_controller_blocks).encode()).hexdige
 
 rule all:
     input:
+        lambda wc: expand(os.path.join(reports_dir("{isolate}"), "identification", "review.json"), isolate=SAMPLES) + expand(os.path.join(reports_dir("{isolate}"), "identification", "report.html"), isolate=SAMPLES) if REVIEW_WAITING else [p for item in rules.assembly_all.input for p in (item(wc) if callable(item) else [item])]
+
+rule assembly_all:
+    input:
         lambda wc: environment_outputs(),
         provenance_condarc_file(),
         provenance_system_info(),
@@ -1227,14 +1243,14 @@ if not SETUP_ONLY and not ADMIN_MODE:
         else:
             raise ValueError(f"{iso}: no valid inputs found in raw/illumina and raw/nanopore")
 
-        taxid = normalize_taxid(SAMPLE_INFO[iso]["target_taxid"] or DEFAULT_TARGET_TAXID)
+        taxid = DEFAULT_TARGET_TAXID if REVIEW_DECISION is not None else normalize_taxid(SAMPLE_INFO[iso]["target_taxid"] or DEFAULT_TARGET_TAXID)
         lineage = SAMPLE_INFO[iso]["busco_lineage"] or DEFAULT_BUSCO_LINEAGE
         medaka_model = SAMPLE_INFO[iso]["medaka_model"] or DEFAULT_MEDAKA_MODEL
 
-        if KRAKEN_DECISION_MODE == "manual" and REQUIRE_TAXID_FOR_KRAKEN and not taxid:
+        if not REVIEW_WAITING and KRAKEN_DECISION_MODE == "manual" and REQUIRE_TAXID_FOR_KRAKEN and not taxid:
             raise ValueError(f"{iso}: Kraken manual mode requires target_taxid but none was provided")
 
-        if RUN_BUSCO and not busco_db_ready(lineage):
+        if not REVIEW_WAITING and RUN_BUSCO and not busco_db_ready(lineage):
             raise ValueError(
                 f"{iso}: BUSCO lineage database '{lineage}' missing at {busco_lineage_dir(lineage)}. "
                 f"Run: snakemake -s Hybas.smk download_busco_db --use-conda --config admin_mode=true"
@@ -1248,9 +1264,9 @@ if not SETUP_ONLY and not ADMIN_MODE:
         }
 
     budget = workflow.global_resources.get("mem_mb")
-    reservations = {"assembly": ASSEMBLY_MEM_MB}
+    reservations = {} if REVIEW_WAITING else {"assembly": ASSEMBLY_MEM_MB}
     if KRAKEN_PROFILE_ENABLED: reservations["kraken"] = KRAKEN_MEM_MB
-    if any(planned_stages(i) for i in SAMPLES): reservations["polishing"] = POLISH_MEM_MB
+    if not REVIEW_WAITING and any(planned_stages(i) for i in SAMPLES): reservations["polishing"] = POLISH_MEM_MB
     if budget is not None:
         for stage, needed in reservations.items():
             if needed > int(budget):
@@ -1274,6 +1290,24 @@ else:
             "busco_lineage": SAMPLE_INFO[iso]["busco_lineage"] or DEFAULT_BUSCO_LINEAGE,
             "medaka_model": SAMPLE_INFO[iso]["medaka_model"] or DEFAULT_MEDAKA_MODEL,
         }
+
+# Review context is independent of the eventual selected target. Raw reads and
+# database identity use the same metadata contract as the ordinary workflow.
+REVIEW_CONTEXT = None
+if REVIEW_ENABLED and not (SETUP_ONLY or ADMIN_MODE):
+    if len(SAMPLES) != 1:
+        raise ValueError("Identification review requires one sample per run; create separate reviewed runs for a batch")
+    REVIEW_CONTEXT = review_support.context(config,
+        SOURCE_FILES + [os.path.join(SOURCE_ROOT, "workflow/lib/identification_review.py")], SAMPLE_SHEET,
+        [file_identity(p) for iso in SAMPLES for p in illumina_r1_files(iso) + illumina_r2_files(iso) + nanopore_files(iso)],
+        [file_identity(p) for p in DB_CORE])
+    if REVIEW_DECISION is not None:
+        review_support.verify_decision(REVIEW_DECISION, REVIEW_CONTEXT, SAMPLES[0])
+
+def review_authorization(wc):
+    if REVIEW_WAITING:
+        raise ValueError("Awaiting researcher review: choose a target before filtering or assembly")
+    return [REVIEW_DECISION_PATH] if REVIEW_DECISION_PATH else []
 
 ###############################################################################
 # SECTION 7 — STEP LABELING
@@ -2078,7 +2112,8 @@ rule clean_illumina:
         r2=merged_r2("{isolate}"),
         kr=os.path.join(kraken_dir("{isolate}"), "illumina.kraken2.txt"),
         report=os.path.join(kraken_dir("{isolate}"), "illumina.report.txt"),
-        decision=kraken_decision_tsv("{isolate}")
+        decision=kraken_decision_tsv("{isolate}"),
+        review=review_authorization
     output:
         r1=clean_r1("{isolate}"),
         r2=clean_r2("{isolate}")
@@ -2144,7 +2179,8 @@ rule clean_ont:
         ont=merged_ont("{isolate}"),
         kr=os.path.join(kraken_dir("{isolate}"), "nanopore.kraken2.txt"),
         report=os.path.join(kraken_dir("{isolate}"), "nanopore.report.txt"),
-        decision=kraken_decision_tsv("{isolate}")
+        decision=kraken_decision_tsv("{isolate}"),
+        review=review_authorization
     output:
         cleaned=clean_ont_path("{isolate}")
     params:
@@ -3800,3 +3836,38 @@ rule hybas_report:
     run:
         from hybas_report import write_report
         write_report(iso_dir(wildcards.isolate), os.path.dirname(output.html))
+
+
+rule identification_review:
+    input:
+        illumina=os.path.join(kraken_dir("{isolate}"), "illumina.report.txt"),
+        ont=os.path.join(kraken_dir("{isolate}"), "nanopore.report.txt"),
+        assignments=[os.path.join(kraken_dir("{isolate}"), x) for x in ["illumina.kraken2.txt", "nanopore.kraken2.txt"]],
+        merged=[merged_r1("{isolate}"), merged_r2("{isolate}"), merged_ont("{isolate}")]
+    output:
+        json=os.path.join(reports_dir("{isolate}"), "identification", "review.json"),
+        html=os.path.join(reports_dir("{isolate}"), "identification", "report.html")
+    params:
+        context=REVIEW_CONTEXT, controller=AWARE_CODE_HASH
+    benchmark:
+        bench("{isolate}", "identification_review")
+    run:
+        iso = wildcards.isolate
+        rows_by_id = {}
+        active = {"illumina": RUN_MODE[iso] != "ont_only", "ont": RUN_MODE[iso] != "illumina_only"}
+        for platform_name, report_path in [("illumina", input.illumina), ("ont", input.ont)]:
+            for row in parse_kraken_report_rows(report_path):
+                if row["taxid"] in {"", "0", "1"} or row["rank"] in {"U", "R"}:
+                    continue
+                entry = rows_by_id.setdefault(row["taxid"], dict(taxid=row["taxid"], name=row["name"], rank=row["rank"], illumina_pct=0.0, ont_pct=0.0))
+                if entry["name"] != row["name"] or entry["rank"] != row["rank"]:
+                    raise ValueError("Kraken reports disagree on taxon identity: " + row["taxid"])
+                entry[platform_name + "_pct"] = row["pct"]
+        for row in rows_by_id.values():
+            row["manual_actions"] = {p: "whitelist_filter" if present else "not_applicable" for p, present in active.items()}
+        target = choose_selected_kraken_target("aware", "", input.illumina, input.ont)
+        recommendation = dict(taxid=target["selected_taxid"], name=target["selected_name"], rank=target["selected_rank"],
+            reason=target["selection_reason"], actions={p: choose_platform_cleaning_decision("aware", target["selected_taxid"], target[p + "_selected_pct"], p)[0] if present else "not_applicable" for p, present in active.items()})
+        review_support.write_report(output.json, output.html, iso, REVIEW_CONTEXT,
+            sorted(rows_by_id.values(), key=lambda x: (-max(x["illumina_pct"], x["ont_pct"]), x["taxid"])),
+            recommendation, [input.illumina, input.ont, *input.assignments, *input.merged], KRAKEN_INCLUDE_CHILDREN, active)

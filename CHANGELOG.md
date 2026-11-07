@@ -1,5 +1,12 @@
 ## HybAs AWARE 9.0.1
 
+## HybAs AWARE 9.0.2 — Alpha
+
+- Optional identification review stops after Kraken and emits an early HTML/JSON report.
+- Manual targets can be deferred; a recorded, checksummed decision resumes the existing work.
+- Changed evidence, inputs, database identity or workflow settings reject stale continuation.
+- The existing target election, platform cleaning and confidence rules are unchanged.
+
 The primary assembly report now uses the Bactomics visual design: navy sidebar, assembly overview, separate read-retention panels, AWARE target and platform-cleaning evidence, recorded polishing route, genome quality, annotation counts and methods/provenance.
 
 New runs write `reports/hybas/report.html`, `reports/hybas/results.json` (schema `hybas-report-1`) and `reports/hybas/methods.txt` per isolate. The report rule depends on existing analysis outputs and executes no analysis tools. MultiQC remains available in its original location as a detailed tool report.
