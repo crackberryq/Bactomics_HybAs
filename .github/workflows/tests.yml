@@ -37,6 +37,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: python -m pip install pytest 'playwright==1.64.1'
       - run: python tests/report_browser.py
+      - run: python tests/aware_plus_browser.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -190,3 +190,11 @@ percentages include descendants, so taxonomic rows must not be added.
 
 The option defaults to false. This feature does not change AWARE inference,
 confidence or filtering thresholds and does not perform strain reconstruction.
+
+### AWARE+ experimental development
+
+The separate [AWARE+ preservation stage](docs/aware-plus/README.md) retains
+species-labelled read groups, ambiguous reads and unclassified reads from an
+identification review. It requires ONT reads, keeps Illumina pairs intact and
+records a per-read assignment ledger, checksums and computational metrics.
+This development stage does not resolve strains or reconstruct additional genomes.
