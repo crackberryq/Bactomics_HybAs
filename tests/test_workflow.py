@@ -112,6 +112,9 @@ def test_end_to_end_routes(tmp_path,mode,polish,pp,expected,stages):
         assert all(job['measurements'] for job in measured)
         archive=tmp_path/'provenance/runtime/computational_runs'/computational[0]['run_id']/measured[0]['benchmark_archive']
         assert 'input_size_mb' in archive.read_text().splitlines()[0]  # Extended even with custom profiles.
+    assert (tmp_path/'sample/reports/hybas/report.html').is_file()
+    bundle=json.loads((tmp_path/'sample/reports/hybas/results.json').read_text())
+    assert bundle['schema_version']=='hybas-report-1' and bundle['summary']==summary
     assert summary['executed_stages']==stages
     assert float(summary['quast_n50'])>0
     assert summary['final_source_stage']==(stages[-1] if stages else 'unicycler')

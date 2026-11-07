@@ -190,3 +190,27 @@ See [CITATION.cff](CITATION.cff) for citation metadata and [LICENSE](LICENSE) fo
 The default branch may remain on a historical version until the repository owner changes it in **Settings → General → Default branch**. For v9.0, use the explicitly versioned branch shown in the clone command. The current CI checks validate software orchestration with mocks; they do not substitute for real-tool assembly qualification.
 
 Repository contributors should use feature branches and pull requests; see [CONTRIBUTING](.github/CONTRIBUTING.md) and [SECURITY](SECURITY.md). Release notes for this version are in [docs/releases/v9.0.0-AWARE.md](docs/releases/v9.0.0-AWARE.md). To publish a GitHub Release, create a tag at the validated commit and publish it from the Releases page after CI passes.
+
+
+
+### Identification review (9.0.2)
+
+Set `kraken_review_before_filtering: true` to finish identification before choosing
+a target. Kraken must be enabled; this mode supports one sample per run (create
+separate Bactologix drafts for batches). No target TaxID is required for the
+identification phase, even in Manual mode.
+
+The run writes `reports/identification/report.html` and `review.json` beneath the
+sample output. Bactologix shows **Awaiting researcher review**. Choose a reported
+TaxID or the AWARE recommendation, preview each platform's action, and choose
+**Confirm target & continue**. **Save for later** does not start a job.
+
+A continuation retains the original configuration and immutable decision. Matching
+merged reads and Kraken outputs are reused with normal Snakemake metadata; no
+completion records are fabricated and rerun triggers remain enabled. The native
+workflow verifies saved evidence hashes before continuing. Raw inputs and database
+identity use file size/mtime checks, not full content hashes. Classification
+percentages include descendants, so taxonomic rows must not be added.
+
+The option defaults to false. This feature does not change AWARE inference,
+confidence or filtering thresholds and does not perform strain reconstruction.

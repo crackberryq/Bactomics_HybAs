@@ -63,3 +63,10 @@ for the complete executable input matrix and preparation requirements.
 
 See [V10_INPUTS.md](V10_INPUTS.md), [COMPUTATIONAL_DATA.md](COMPUTATIONAL_DATA.md)
 and [RELEASE_CONVENTIONS.md](RELEASE_CONVENTIONS.md) for the detailed contracts.
+
+
+### Regular AWARE integration (7 November 2026)
+
+The development branch now incorporates regular AWARE 9.0.2. Optional identification review stops after Kraken for legacy and manifest inputs, including PacBio. Continuation uses the saved Auto resource resolution, verifies evidence and input identities, and records the explicit target decision separately. PacBio reports retain their platform identity and Flye assembly route. AWARE+ remains a separate draft.
+
+Qualification and publication remain separate release gates. Software-fixture tests do not establish biological assembly accuracy.
