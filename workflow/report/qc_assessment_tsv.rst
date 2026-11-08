@@ -1,4 +1,8 @@
-Qc assessment tsv
-=================
+Processing and evidence-presence checks
+======================================
 
-Output from the corresponding HybAs rule. Disabled modules are explicitly identified in run metadata.
+These checks report missing outputs, recorded metrics and review conditions.
+PASS on an individual recording check does not establish analytical quality.
+Analytical suitability remains NOT_ASSESSED until measured evidence is evaluated
+against independently validated criteria for the intended use. Disabled modules
+are explicitly identified in run metadata.

@@ -146,3 +146,17 @@ def test_historical_work_layout_and_stage_qc(tmp_path):
     assert "4567890" in page and "450000" in page
     assert "Historical run: AWARE decision metadata was not found" in page
     assert "stage-graph" in page
+
+
+def test_zero_completeness_and_model_provenance_remain_visible(tmp_path):
+    iso=fixture(tmp_path)
+    path=iso/'metadata/run_summary.json'
+    summary=json.loads(path.read_text());summary.update(busco_complete_percent=0,
+        medaka_model_requested='reviewed-model',medaka_model_effective='resolved-model.tar.gz',
+        medaka_model_sha256='abc123',medaka_model_selection='explicit',medaka_input_metadata_status='mixed')
+    path.write_text(json.dumps(summary))
+    run(tmp_path)
+    html=(iso/'reports/hybas_research/hybas_report.html').read_text()
+    assert 'BUSCO complete</small><strong>0%' in html
+    assert 'Analytical suitability: not assessed' in html
+    assert 'resolved-model.tar.gz' in html and 'abc123' in html and 'mixed' in html

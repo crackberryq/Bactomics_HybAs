@@ -26,8 +26,9 @@ table_columns_visible:
     quast_gc_percent: true
     busco_complete_percent: true
     estimated_ont_coverage_x: true
-    qc_overall: true
-    qc_contiguity: true
+    processing_evidence_status: true
+    analytical_suitability: true
+    contig_count_recorded: true
     qc_coverage: true
     tool_unicycler: true
     tool_racon: true

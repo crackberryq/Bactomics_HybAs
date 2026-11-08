@@ -89,9 +89,13 @@ def pairs(r1, r2):
         yield left, right
 
 
-def record(handle, value, name=None):
+def record(handle, value, name=None, preserve_comment=False):
     header, seq, qual = value
-    handle.write(f"{'@' + name if name else header}\n{seq}\n+\n{qual}\n")
+    if name:
+        fields = header.split(maxsplit=1)
+        comment = fields[1] if preserve_comment and len(fields) > 1 else ''
+        header = '@' + name + (' ' + comment if comment else '')
+    handle.write(f"{header}\n{seq}\n+\n{qual}\n")
 
 
 def prepare(plan, r1, r2, audit):

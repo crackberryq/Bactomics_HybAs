@@ -129,7 +129,7 @@ def generate(isolate, output_dir, with_audit):
         "Run mode": summary.get("run_mode", "Not recorded"),
         "Assembly size": summary.get("assembly_bp", "Not recorded"),
         "N50": summary.get("quast_n50", "Not recorded"),
-        "BUSCO complete": (str(summary.get("busco_complete_percent", "—")) + "%") if summary.get("busco_complete_percent") else "Not recorded"
+        "BUSCO complete": (str(summary["busco_complete_percent"]) + "%") if summary.get("busco_complete_percent") not in (None, "", "NA", "Not recorded") else "Not recorded"
     }
     stats = "".join("<div class='stat'><small>" + esc(k) + "</small><strong>" + esc(v) + "</strong></div>"
                     for k, v in overview.items())
@@ -207,6 +207,11 @@ def generate(isolate, output_dir, with_audit):
         decision_notice = ""
     strategy = summary.get("input_strategy", {})
     strategy_html = "<details><summary>Input libraries and assembly choice</summary><pre>" + esc(json.dumps(strategy, indent=2)) + "</pre></details>"
+    model_html = "<h3>Medaka model provenance</h3>" + key_values(summary, [
+        "medaka_model_requested", "medaka_model_effective", "medaka_model_sha256",
+        "medaka_model_selection", "medaka_input_metadata_status"])
+    model_html += ("<p class='note'>An explicitly selected model with missing or mixed read metadata requires researcher review. "
+                   "Successful execution does not establish improved accuracy. Missing legacy model provenance is not inferred.</p>")
     compute_html = "<p><a href='../../../provenance/runtime/computational_report.html'>Computational resources and invocation history</a></p><p class='note'>Final resource totals are recorded when the workflow finishes. Missing measurements are not estimated.</p>"
     generated = datetime.now(timezone.utc).isoformat()
     body = (
@@ -218,7 +223,9 @@ def generate(isolate, output_dir, with_audit):
         "<a href='#removed'>03 · Removed reads</a><a href='#assembly'>04 · Assembly & polishing</a>"
         "<a href='#provenance'>05 · Evidence files</a></aside><main>"
         "<div class='hero'><h1>" + esc(isolate.name) + "</h1><p>HybAs 10 — Experimental · AWARE+ research report · input modes and polishing require validation</p></div>"
-        "<section id='overview'><h2>Overview</h2><div class='grid'>" + stats + "</div></section>"
+        "<section id='overview'><h2>Overview</h2><div class='grid'>" + stats + "</div>"
+        "<p class='warn'><strong>Analytical suitability: not assessed.</strong> Recorded measurements and successful processing "
+        "do not establish genome correctness or suitability for downstream negative findings.</p></section>"
         "<section id='aware'><h2>AWARE decision explorer</h2><div class='panel'>"
         "<p class='note'>Target election, per-platform read actions and conservative confidence are separate outputs. "
         "A low confidence label does not override a platform's passthrough.</p>" +
@@ -232,7 +239,7 @@ def generate(isolate, output_dir, with_audit):
         key_values(execution, ["requested_polish_mode", "run_mode", "planned_stages",
                                "executed_stages", "skipped_stages", "final_source_stage",
                                "final_source_path", "final_source_sha256"]) +
-        strategy_html + "<h3>Recorded assembly stages</h3>" +
+        strategy_html + model_html + "<h3>Recorded assembly stages</h3>" +
         table(["Stage", "FASTA bases", "Contigs", "SHA256"], stage_rows) + stage_section + "</div></section>"
         "<section id='provenance'><h2>Evidence and exports</h2><div class='panel'>" +
         compute_html + "<h3>Discovered evidence</h3>" + table(["Evidence", "Source"], provenance_rows) +

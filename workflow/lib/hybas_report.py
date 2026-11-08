@@ -144,6 +144,7 @@ def render_report(data):
         return '<div class="metric-bars">'+''.join('<div class="metric-row"><span>'+e(label)+'</span><div class="metric-track">'+('<span style="width:'+str(max(0,100*n/maximum))+'%"></span>' if n is not None else '')+'</div><strong>'+show(value,unit)+'</strong></div>' for (label,value),n in zip(rows,vals))+'</div>'
     notices=''.join('<p class="callout warn">'+e(w)+'</p>' for w in b.get('warnings',[]))
     overview=notices+'<div class="stats">'+stat('Assembly length',s.get('assembly_bp'),'bp · saved final assembly')+stat('Contigs',s.get('assembly_contig_count_fasta'))+stat('N50',s.get('quast_n50'),'bp · QUAST')+stat('BUSCO complete',s.get('busco_complete_percent') if s.get('run_busco') is not False else None,'Percent · disabled' if s.get('run_busco') is False else 'Percent · recorded lineage')+'</div>'
+    overview+='<p class="callout warn"><strong>Analytical suitability: not assessed.</strong> Recorded QC measurements and successful processing do not establish genome correctness or downstream suitability.</p>'
     overview+=panel('Run at a glance',pairs([('Input mode',s.get('run_mode')),('Final source stage',s.get('final_source_stage')),('GC (%)',s.get('quast_gc_percent')),('Analysis version',s.get('workflow_version')),('Report renderer',RENDERER_VERSION),('Circularity','Not recorded in this evidence bundle')]))
     long_prefix = "pacbio" if s.get("long_read_platform") == "pacbio" else "ont"
     long_title = "PacBio" if long_prefix == "pacbio" else "Oxford Nanopore"
@@ -171,8 +172,18 @@ def render_report(data):
     assembly+=panel('Final assembly metrics',table([{'metric':label,'value':s.get(key)} for label,key in [('Length (bp)','quast_total_length'),('Largest contig (bp)','quast_largest_contig'),('N50 (bp)','quast_n50'),('L50','quast_l50'),('GC (%)','quast_gc_percent')]],['metric','value'])+'<p class="small muted">Stage-by-stage quality measurements were not captured in this summary; no improvement is inferred from a stage having run.</p>')
     quality=panel('BUSCO',('<p>Disabled in the recorded configuration.</p>' if s.get('run_busco') is False else '<p>Lineage: '+show(s.get('busco_lineage'))+'</p>'+bars([(label,s.get('busco_'+key+'_percent')) for label,key in [('Single copy','single_copy'),('Duplicated','duplicated'),('Fragmented','fragmented'),('Missing','missing')]],'%')))
     quality+=panel('Coverage',('<p>PacBio mapped coverage is not recorded in this evidence bundle.</p>' if long_prefix=='pacbio' else pairs([('Estimated ONT coverage (×)',s.get('estimated_ont_coverage_x')),('Recorded ONT bases',s.get('coverage_ont_bp')),('Assembly bases used',s.get('coverage_assembly_bp'))]))+'<p class="small muted">This is the saved base-count estimate, not a per-position mapped-depth distribution.</p>')
+    quality+=panel('Analytical suitability', '<p><strong>Not assessed against validated use-specific acceptance criteria.</strong> '
+                   'Successful processing and recorded measurements do not establish genome correctness or suitability for downstream negative findings.</p>')
     if ts.get('qc_assessment'):
-        quality+=detail('Workflow QC checks',table(ts['qc_assessment'],list(ts['qc_assessment'][0])))
+        quality+=detail('Processing and evidence-presence checks', '<p>PASS in individual checks means the stated recording or processing condition was met. '
+                        'A legacy overall_qc_status is also a bookkeeping check, not an analytical quality verdict.</p>'+
+                        table(ts['qc_assessment'],list(ts['qc_assessment'][0])))
+    if 'medaka' in (s.get('executed_stages') or []):
+        assembly+=panel('Medaka model provenance',pairs([('Requested model',s.get('medaka_model_requested',s.get('medaka_model'))),
+            ('Effective model',s.get('medaka_model_effective')),('Model SHA256',s.get('medaka_model_sha256')),
+            ('Selection',s.get('medaka_model_selection')),('Read model metadata',s.get('medaka_input_metadata_status'))])+
+            '<p class="small muted">An explicitly selected model with missing or mixed read metadata needs researcher review. '
+            'Successful execution is not evidence of improved accuracy.</p>')
     annotation=b.get('annotation',{})
     annotation_html=panel('Recorded annotation', '<p>'+e(annotation.get('status','Not recorded'))+'</p>'+table([dict(feature=k,count=v) for k,v in annotation.get('counts',{}).items()],['feature','count'])+'<p>Use the final assembly, matching GFF and protein FASTA for downstream BaSIS and GeneScope runs.</p>')
     artifacts=b.get('artifacts',[])

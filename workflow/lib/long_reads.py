@@ -19,7 +19,7 @@ def prepare(plan, platform, output, audit):
                 total, bases = 0, 0
                 for total, value in enumerate(fastq(group['reads']), 1):
                     name = f'hybas_{platform}_L{li}G{gi}R{total}'
-                    record(reads, value, name)
+                    record(reads, value, name, preserve_comment=True)
                     ids.write(json.dumps({'id': name, 'original_header': value[0]}) + '\n')
                     bases += len(value[1])
                 if not total:

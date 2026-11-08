@@ -56,7 +56,9 @@ def test_5000_default_policy_cases(tmp_path):
         target = rng.choice(['','11','12','21','22','999'])
         both = rng.choice([True, False])
         old['KRAKEN_AUTO_USE_BOTH_PLATFORMS'] = new['KRAKEN_AUTO_USE_BOTH_PLATFORMS'] = both
-        assert evaluate(old, mode, target, left, right) == evaluate(new, mode, target, left, right), case
+        # Target election and independent platform cleaning remain unchanged.
+        # Confidence now compares same-rank rivals; separate regression tests cover it.
+        assert evaluate(old, mode, target, left, right)[:4] == evaluate(new, mode, target, left, right)[:4], case
 
 
 def test_confidence_config_is_effective_and_does_not_change_platform_action(tmp_path):

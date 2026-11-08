@@ -62,6 +62,12 @@ from settings import SettingsResolution, resource_value
 from input_manifest import load_manifest
 from aware_modes import resolve as resolve_aware_mode
 from library_inputs import execution_samples
+from resource_identity import inventory as dataset_inventory
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
+def busco_content_identity(lineage):
+    return dataset_inventory(busco_lineage_dir(lineage))
 from snakemake.io import report, directory, touch
 
 def as_bool(x):
@@ -383,7 +389,9 @@ def stage_racon0(i): return os.path.join(work_racon_dir(i), "stage_racon0.fasta"
 def stage_racon(i, n): return os.path.join(work_racon_dir(i), f"stage_racon{n}.fasta")
 def racon_paf(i, n): return os.path.join(work_racon_dir(i), f"ont_vs_racon{n}.paf")
 
-def stage_medaka(i): return os.path.join(work_medaka_dir(i), "consensus.fasta")
+# Use a new publication path so Snakemake cannot remove a pre-upgrade consensus
+# while replacing a failed scheduled output. Legacy files remain beside current/.
+def stage_medaka(i): return os.path.join(work_medaka_dir(i), "current", "consensus.fasta")
 
 def bwa_ref(i): return os.path.join(work_mapping_dir(i), "assembly.medaka.fa")
 def bwa_fai(i): return os.path.join(work_mapping_dir(i), "assembly.medaka.fa.fai")
@@ -1085,11 +1093,11 @@ def compute_taxonomic_confidence(illumina_report, ont_report, selected_taxid):
         if x and normalize_taxid(x["taxid"]) != selected_taxid:
             runner_candidates.append(x)
 
-    if globals().get("AWARE_MODE", "legacy") != "legacy":
-        all_rows = parse_kraken_report_rows(illumina_report) + parse_kraken_report_rows(ont_report)
-        selected_rank = next((r["rank"] for r in all_rows if r["taxid"] == selected_taxid), None)
-        # Compare alternative taxa at the selected rank, not overlapping ancestors.
-        runner_candidates = [r for r in all_rows if r["rank"] == selected_rank and r["taxid"] != selected_taxid]
+    all_rows = parse_kraken_report_rows(illumina_report) + parse_kraken_report_rows(ont_report)
+    selected_rank = next((r["rank"] for r in all_rows if r["taxid"] == selected_taxid), None)
+    # Clade percentages overlap. Compare at the selected rank in legacy mode too;
+    # the target's ancestor is never evidence of a competing population.
+    runner_candidates = [r for r in all_rows if r["rank"] == selected_rank and r["taxid"] != selected_taxid]
     runner_candidates = sorted(runner_candidates, key=lambda x: x["pct"], reverse=True)
     runner = runner_candidates[0] if runner_candidates else None
     runner_pct = runner["pct"] if runner else 0.0
@@ -1209,7 +1217,9 @@ SAMPLE_FILES = ([SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) 
 SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow", "lib", "workflow_support.py")
 SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE,
                 os.path.join(SOURCE_ROOT, "workflow", "lib", "settings.py"), LIBRARY_ADAPTER,
-                os.path.join(SOURCE_ROOT, "workflow", "lib", "input_manifest.py"), LONG_ADAPTER]
+                os.path.join(SOURCE_ROOT, "workflow", "lib", "input_manifest.py"), LONG_ADAPTER,
+                os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
+                os.path.join(SOURCE_ROOT, "workflow/lib/resource_identity.py")]
 EFFECTIVE_CONFIG = json.dumps(config, sort_keys=True, default=str)
 AWARE_SETTINGS = {k: v for k, v in globals().copy().items() if k.startswith("KRAKEN_") and isinstance(v, (str, bool, int, float))}
 # Explicitly fingerprint only controller source so report-only edits do not rerun classification.
@@ -1803,7 +1813,8 @@ rule database_hashes:
         kraken=lambda wc: DB_CORE if KRAKEN_PROFILE_ENABLED else [],
         busco=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[i]["busco_lineage"]), "dataset.cfg") for i in SAMPLES] if RUN_BUSCO and not (SETUP_ONLY or ADMIN_MODE) else []
     params:
-        kraken_dir=KRAKEN_DB_DIR, busco_dir=BUSCO_DB_DIR, enabled=KRAKEN_PROFILE_ENABLED
+        kraken_dir=KRAKEN_DB_DIR, busco_dir=BUSCO_DB_DIR, enabled=KRAKEN_PROFILE_ENABLED,
+        busco_content=lambda wc: {lineage: busco_content_identity(lineage)["sha256"] for lineage in sorted(set(ISO_OVERRIDES[i]["busco_lineage"] for i in SAMPLES))} if RUN_BUSCO else {}
     output:
         provenance_db_hashes()
     message:
@@ -1826,7 +1837,9 @@ rule database_hashes:
         for lineage in seen_lineages:
             lineage_path = busco_lineage_dir(lineage)
             if os.path.isdir(lineage_path):
-                rows.append(("busco_lineage_dir", lineage_path, "DIR"))
+                identity = busco_content_identity(lineage)
+                rows.append(("busco_lineage_content", lineage_path, identity["sha256"]))
+                rows.extend(("busco_dataset_file", os.path.join(lineage_path, row["path"]), row["sha256"]) for row in identity["files"])
                 marker = os.path.join(lineage_path, ".complete")
                 rows.append(("busco_lineage_complete_marker", marker, sha256_file(marker) if os.path.exists(marker) else "NA"))
             else:
@@ -3204,15 +3217,22 @@ rule racon_consensus:
 rule medaka:
     input:
         prev=lambda wc: stage_racon(wc.isolate, RACON_ROUNDS) if RACON_ROUNDS > 0 else stage_path(wc.isolate, base_stage(wc.isolate)),
-        ont=filt_ont("{isolate}")
+        ont=filt_ont("{isolate}"),
+        adapter=os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
+        library=os.path.join(SOURCE_ROOT, "workflow/lib/library_inputs.py"),
+        support=SUPPORT_FILE,
+        configured_model=lambda wc: [ISO_OVERRIDES[wc.isolate]["medaka_model"]] if os.path.isfile(ISO_OVERRIDES[wc.isolate]["medaka_model"]) else []
     output:
-        stage_medaka("{isolate}")
+        consensus=stage_medaka("{isolate}"),
+        receipt=os.path.join(work_medaka_dir("{isolate}"), "execution.json")
     params:
         polish=POLISH_MODE, rounds=RACON_ROUNDS,
         outdir=lambda wc: work_medaka_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate),
         mode=lambda wc: RUN_MODE[wc.isolate],
-        model=lambda wc: ISO_OVERRIDES[wc.isolate]["medaka_model"]
+        model=lambda wc: ISO_OVERRIDES[wc.isolate]["medaka_model"],
+        model_arg=lambda wc: shlex.quote(ISO_OVERRIDES[wc.isolate]["medaka_model"]),
+        configured_model_sha=lambda wc: sha256_file(ISO_OVERRIDES[wc.isolate]["medaka_model"]) if os.path.isfile(ISO_OVERRIDES[wc.isolate]["medaka_model"]) else "resolved_at_execution"
     log:
         os.path.join(logs_dir("{isolate}"), "medaka.log")
     benchmark:
@@ -3230,15 +3250,9 @@ rule medaka:
         (
         set -euo pipefail
         mkdir -p "{params.outdir}" "{params.logdir}"
-        if [ "{params.mode}" = "illumina_only" ] || [ "{POLISH_MODE}" = "none" ] || [ "{POLISH_MODE}" = "racon" ]; then
-          cp "{input.prev}" "{output}"
-          exit 0
-        fi
-        if [ -n "{params.model}" ]; then
-          medaka_consensus -t {threads} -i "{input.ont}" -d "{input.prev}" -o "{params.outdir}" -m "{params.model}"
-        else
-          medaka_consensus -t {threads} -i "{input.ont}" -d "{input.prev}" -o "{params.outdir}"
-        fi
+        python {input.adapter:q} --reads {input.ont:q} --draft {input.prev:q} \
+          --output {output.consensus:q} --receipt {output.receipt:q} \
+          --threads {threads} --requested {params.model_arg}
         ) > "{log}" 2>&1
         """
 
@@ -3360,6 +3374,7 @@ rule polypolish:
 rule polish_execution:
     input:
         assemblies=lambda wc: [stage_path(wc.isolate, x) for x in [base_stage(wc.isolate)] + planned_stages(wc.isolate)],
+        medaka_status=lambda wc: [os.path.join(work_medaka_dir(wc.isolate), "execution.json")] if "medaka" in planned_stages(wc.isolate) else [],
         polypolish_status=lambda wc: [polish_status(wc.isolate)] if needs_polypolish(wc.isolate) else []
     output: polish_execution("{isolate}")
     params:
@@ -3388,6 +3403,10 @@ rule polish_execution:
                 skipped["polypolish"] = pp["reason"]
         stages = [{"stage": name, "path": path, **require_fasta(path)}
                   for name, path in zip([base_stage(iso)] + planned, input.assemblies)]
+        medaka_evidence = json.loads(Path(input.medaka_status[0]).read_text()) if input.medaka_status else {"status": "not_requested"}
+        if input.medaka_status and (medaka_evidence.get("status") != "completed" or
+                                   medaka_evidence.get("consensus_sha256") != sha256_file(stage_medaka(iso))):
+            raise ValueError("Medaka execution receipt does not match the recorded consensus")
         final_stage = executed[-1] if executed else base_stage(iso)
         write_json(output[0], {"schema": "hybas-polishing-v1", "workflow_version": VERSION,
             "requested_polish_mode": POLISH_MODE, "run_mode": RUN_MODE[iso],
@@ -3395,7 +3414,8 @@ rule polish_execution:
             "final_source_stage": final_stage, "final_source_path": stage_path(iso, final_stage),
             "promoted_artifact_path": params.source,
             "final_source_sha256": sha256_file(params.source), "stages": stages,
-            "polypolish": pp})
+            "polypolish": pp,
+            "medaka": medaka_evidence})
 
 ###############################################################################
 # SECTION 18 — FINAL ASSEMBLY
@@ -3457,16 +3477,22 @@ rule quast:
 
 rule busco:
     input:
-        final_asm("{isolate}")
+        asm=final_asm("{isolate}"),
+        resource_code=os.path.join(SOURCE_ROOT, "workflow/lib/resource_identity.py"),
+        support=SUPPORT_FILE,
+        dataset=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]), item["path"]) for item in busco_content_identity(ISO_OVERRIDES[wc.isolate]["busco_lineage"])["files"]] if RUN_BUSCO else []
     output:
         txt=report(busco_txt("{isolate}"), caption="workflow/report/busco_txt.rst", category="QC", subcategory="BUSCO"),
-        html=report(busco_html("{isolate}"), caption="workflow/report/busco_html.rst", category="QC", subcategory="BUSCO")
+        html=report(busco_html("{isolate}"), caption="workflow/report/busco_html.rst", category="QC", subcategory="BUSCO"),
+        identity=os.path.join(busco_dir("{isolate}"), "resource_identity.json")
     params:
         enabled=RUN_BUSCO,
         outdir=lambda wc: busco_dir(wc.isolate),
         rundir=lambda wc: busco_run_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate),
-        lineage=lambda wc: ISO_OVERRIDES[wc.isolate]["busco_lineage"]
+        lineage=lambda wc: ISO_OVERRIDES[wc.isolate]["busco_lineage"],
+        lineage_path=lambda wc: busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]),
+        content_sha=lambda wc: busco_content_identity(ISO_OVERRIDES[wc.isolate]["busco_lineage"])["sha256"] if RUN_BUSCO else "disabled"
     log:
         os.path.join(logs_dir("{isolate}"), "busco.log")
     benchmark:
@@ -3488,9 +3514,11 @@ rule busco:
           mkdir -p "{params.rundir}"
           : > "{output.txt}"
           : > "{output.html}"
+          printf '{{"status":"disabled"}}\n' > "{output.identity}"
           exit 0
         fi
-        busco -i "{input}" \
+        python {input.resource_code:q} --path {params.lineage_path:q} --expected {params.content_sha:q}
+        busco -i "{input.asm}" \
           -o "busco_{wildcards.isolate}" \
           --out_path "{params.outdir}" \
           -m genome \
@@ -3498,6 +3526,7 @@ rule busco:
           --download_path "{BUSCO_DB_DIR}" \
           -c {threads} \
           --force
+        python {input.resource_code:q} --path {params.lineage_path:q} --expected {params.content_sha:q} --receipt {output.identity:q}
         sfile=$(ls -1 "{params.rundir}"/short_summary*.txt 2>/dev/null | head -n1 || true)
         hfile=$(ls -1 "{params.rundir}"/short_summary*.html 2>/dev/null | head -n1 || true)
         if [ -n "$sfile" ] && [ -s "$sfile" ]; then if [ "$sfile" != "{output.txt}" ]; then cp -f "$sfile" "{output.txt}"; fi; else echo "BUSCO completed without a nonempty short summary" >&2; exit 1; fi
@@ -3869,6 +3898,7 @@ rule run_summary:
         seq_asm=seqkit_assembly("{isolate}"),
         quast=quast_tsv("{isolate}"),
         busco=busco_txt("{isolate}"),
+        busco_identity=os.path.join(busco_dir("{isolate}"), "resource_identity.json"),
         cov=coverage_note("{isolate}"),
         skip=skip_reasons_tsv("{isolate}"),
         bam=lambda wc: [namesort_bam(wc.isolate)] if needs_polypolish(wc.isolate) else [],
@@ -4086,7 +4116,13 @@ rule run_summary:
 
             "target_taxid": ISO_OVERRIDES[iso]["target_taxid"],
             "busco_lineage": ISO_OVERRIDES[iso]["busco_lineage"],
+            "busco_dataset_sha256": json.loads(Path(input.busco_identity).read_text()).get("sha256"),
             "medaka_model": ISO_OVERRIDES[iso]["medaka_model"],
+            "medaka_model_requested": ISO_OVERRIDES[iso]["medaka_model"],
+            "medaka_model_effective": execution.get("medaka", {}).get("model", {}).get("effective_model"),
+            "medaka_model_sha256": execution.get("medaka", {}).get("model", {}).get("sha256"),
+            "medaka_model_selection": execution.get("medaka", {}).get("model", {}).get("selection", "not_requested"),
+            "medaka_input_metadata_status": execution.get("medaka", {}).get("model", {}).get("input_metadata", {}).get("status", "not_assessed"),
 
             "input_illumina_r1_files": len(illumina_r1_files(iso)),
             "input_illumina_r2_files": len(illumina_r2_files(iso)),
@@ -4285,9 +4321,9 @@ rule qc_assessment:
             rows.append(("assembly_bp_nonzero", "WARN", f"assembly_bp_unparseable={assembly_bp}"))
 
         try:
-            rows.append(("assembly_contiguity", "PASS" if int(str(contigs)) >= 1 else "FAIL", f"assembly_contig_count_fasta={contigs}"))
+            rows.append(("assembly_contig_count_recorded", "PASS" if int(str(contigs)) >= 1 else "FAIL", f"assembly_contig_count_fasta={contigs}; presence check only"))
         except Exception:
-            rows.append(("assembly_contiguity", "WARN", f"assembly_contig_count_unparseable={contigs}"))
+            rows.append(("assembly_contig_count_recorded", "WARN", f"assembly_contig_count_unparseable={contigs}"))
 
         try:
             rows.append(("n50_recorded", "PASS" if float(str(n50).replace(",", "")) > 0 else "WARN", f"N50={n50}"))
@@ -4295,7 +4331,7 @@ rule qc_assessment:
             rows.append(("n50_recorded", "WARN", f"N50_unparseable={n50}"))
 
         try:
-            rows.append(("busco_complete_recorded", "PASS" if float(busco_c) >= 0 else "WARN", f"BUSCO_complete_percent={busco_c}"))
+            rows.append(("busco_complete_recorded", "PASS" if 0 <= float(busco_c) <= 100 else "WARN", f"BUSCO_complete_percent={busco_c}; numeric recording check only, not an acceptance threshold"))
         except Exception:
             rows.append(("busco_complete_recorded", "WARN" if RUN_BUSCO else "SKIP", f"BUSCO_complete_unparseable={busco_c}"))
 
@@ -4314,7 +4350,10 @@ rule qc_assessment:
         elif any(status == "WARN" for _, status, _ in rows):
             overall_status = "WARN"
 
-        rows.append(("overall_qc_status", overall_status, "aggregate QC status"))
+        rows.append(("processing_evidence_status", {"PASS": "RECORDED", "WARN": "REVIEW_REQUIRED", "FAIL": "MISSING"}[overall_status],
+                     "Processing/evidence-presence checks only; not analytical quality, genome correctness or downstream suitability"))
+        rows.append(("analytical_suitability", "NOT_ASSESSED",
+                     "Review measured completeness, contiguity, contamination and coverage against independently validated criteria for the intended use"))
 
         with open(output[0], "w", encoding="utf-8") as out:
             out.write("check\tstatus\tdetail\n")
@@ -4381,8 +4420,9 @@ rule multiqc_custom_content:
                 "quast_gc_percent\t"
                 "busco_complete_percent\t"
                 "estimated_ont_coverage_x\t"
-                "qc_overall\t"
-                "qc_contiguity\t"
+                "processing_evidence_status\t"
+                "analytical_suitability\t"
+                "contig_count_recorded\t"
                 "qc_coverage\t"
                 "assembler\tinput_strategy\tlibrary_count\ttool_spades\t"
                 "tool_unicycler\t"
@@ -4428,8 +4468,9 @@ rule multiqc_custom_content:
                 f"{s.get('quast_gc_percent', 'NA')}\t"
                 f"{s.get('busco_complete_percent', 'NA')}\t"
                 f"{s.get('estimated_ont_coverage_x', 'NA')}\t"
-                f"{qc_map.get('overall_qc_status', {}).get('status', 'NA')}\t"
-                f"{qc_map.get('assembly_contiguity', {}).get('status', 'NA')}\t"
+                f"{qc_map.get('processing_evidence_status', {}).get('status', 'NOT_RECORDED')}\t"
+                f"{qc_map.get('analytical_suitability', {}).get('status', 'NOT_ASSESSED')}\t"
+                f"{qc_map.get('assembly_contig_count_recorded', {}).get('status', 'NA')}\t"
                 f"{qc_map.get('ont_coverage', {}).get('status', 'NA')}\t"
                 f"{s.get('assembler', 'NA')}\t{s.get('input_strategy', 'NA')}\t{s.get('library_count', 'NA')}\t{version_map.get('spades', 'NA')}\t"
                 f"{version_map.get('unicycler', 'NA')}\t"

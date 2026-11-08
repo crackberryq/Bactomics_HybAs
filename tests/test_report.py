@@ -57,3 +57,12 @@ def test_pacbio_report_retains_platform_and_assembler():
         long_read_platform='pacbio',assembler='flye',pacbio={'raw':{'reads':123,'bases':456},'cleaned':{'reads':100,'bases':400}},pacbio_selected_target_percent=88))
     assert 'PacBio' in text and 'flye' in text and '123 reads' in text
     assert 'Oxford Nanopore' not in text and 'After Filtlong' not in text and 'unicycler' not in text
+
+
+def test_processing_checks_are_not_analytical_suitability():
+    data=dict(schema_version='hybas-report-1',summary=dict(isolate='sample',workflow_version='10',run_busco=True,busco_complete_percent=0,executed_stages=['medaka'],medaka_model_requested='reviewed',medaka_model_effective='effective.tar.gz',medaka_model_selection='explicit',medaka_input_metadata_status='mixed'),
+              tables={'qc_assessment':[{'check':'overall_qc_status','status':'PASS','detail':'legacy bookkeeping'}]})
+    text=render_report(data)
+    assert 'Not assessed against validated use-specific acceptance criteria' in text
+    assert 'legacy overall_qc_status is also a bookkeeping check' in text
+    assert 'Medaka model provenance' in text and 'effective.tar.gz' in text and 'mixed' in text
