@@ -130,6 +130,7 @@ def verify_continuation(path, checksum, context, isolate):
 
 def build(review, output, cleaned, decision, plan=None, preserve_groups=False, statistics=False, selector=None):
     from aware_preservation import Writers, fastq, read_key, preserve
+    from aware_output_report import decisions, render
     receipt = read_json(review)
     for expected in receipt['files']:
         if identity(expected['path']) != expected:
@@ -190,14 +191,12 @@ def build(review, output, cleaned, decision, plan=None, preserve_groups=False, s
         files = [dict(path=str(p.relative_to(staging)), size=p.stat().st_size, sha256=digest(p))
                  for p in sorted(staging.rglob('*')) if p.is_file()]
         doc = dict(schema=SCHEMA, isolate=receipt['isolate'], context=receipt['context'],
-                   review_sha256=digest(review), parent_recommendation=receipt.get('recommendation'),
+                   review_sha256=digest(review), filtering=decisions(decision, receipt['isolate']), parent_recommendation=receipt.get('recommendation'),
                    filtering_history='primary uses regular AWARE cleaning; species groups use provisional classification of original inputs',
                    continuation_inputs=before, files=files, groups=groups, statistics=stats,
                    limitation='Species groups are provisional and can contain multiple strains. Confidence intervals describe observed assignment support, not identification correctness.')
         (staging/'manifest.json').write_text(json.dumps(doc, indent=2)+'\n')
-        esc=lambda x:html.escape(str(x))
-        rows=''.join('<tr><td>'+esc(g['name'])+'</td><td>'+esc(g['category'])+'</td><td>'+esc(g['units'])+'</td><td>'+esc(g.get('mode', g['reason']))+'</td></tr>' for g in groups)
-        (staging/'report.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>AWARE outputs</title><style>body{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:1rem}td,th{padding:.6rem;text-align:left;border-bottom:1px solid #ccc}table{width:100%}</style><h1>HybAs AWARE · Outputs</h1><p>'+esc(doc['limitation'])+'</p><p>Select retained groups in Bactologix to register derived samples. Continue the parent run to assemble its primary output.</p><table><tr><th>Group</th><th>Category</th><th>Units by platform</th><th>Assembly route</th></tr>'+rows+'</table><p><a href="manifest.json">Portable bundle manifest</a> · <a href="filtering.tsv">Original filtering decisions</a></p>'+('<h2>Statistical evidence</h2><p>'+esc(stats['interpretation'])+'</p><pre>'+esc(json.dumps(stats,indent=2))+'</pre>' if stats else '')+'</html>')
+        (staging/'report.html').write_text(render(doc))
         for row in before:
             if identity(row['path']) != row:
                 raise ValueError('AWARE inputs changed during bundle creation')

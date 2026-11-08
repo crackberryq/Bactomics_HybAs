@@ -44,3 +44,7 @@ Statistics use original Kraken assignments, not selected/filtered groups. One Il
 Selection stability uses 200 deterministic multinomial bootstrap replicates (seed 1729), independently within each original library/read group. Counts are aggregated within each platform, regenerated as report counts and passed to the unchanged automatic target-election function. The report states the fraction of replicates selecting the original automatic recommendation, even when the researcher subsequently chooses a different manual target. It does not average platform support into a confidence score and does not change filtering decisions.
 
 Database bias, duplicated molecules, correlated reads and sampling bias are not corrected by these statistics. Report count mismatches, duplicate identifiers and unresolved assignment taxonomy fail validation rather than produce unsupported statistics. Biological accuracy still requires external validation; software fixture tests do not establish it.
+
+## Unified stage report
+
+The report distinguishes the actual selected target and per-platform cleaning actions from the automatic recommendation. It presents retained groups, library identities, support intervals and selection stability as readable tables. The report is a completed AWARE-stage record; assembly completion is determined by the saved run, not by the existence of this HTML file. Bactologix Methods exports verify stage-receipt checksums and include the corresponding evidence in reproducibility ZIPs.

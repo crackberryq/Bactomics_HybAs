@@ -1408,7 +1408,7 @@ if (REVIEW_ENABLED or AWARE_OUTPUTS) and not (SETUP_ONLY or ADMIN_MODE):
     if REVIEW_ENABLED and len(SAMPLES) != 1:
         raise ValueError("Identification review requires one sample per run; create separate reviewed runs for a batch")
     REVIEW_CONTEXT = review_support.context(config,
-        SOURCE_FILES + SAMPLE_FILES + [os.path.join(SOURCE_ROOT, "workflow/lib/" + name) for name in ("identification_review.py", "aware_bundle.py", "aware_preservation.py", "aware_statistics.py")], SAMPLE_SHEET,
+        SOURCE_FILES + SAMPLE_FILES + [os.path.join(SOURCE_ROOT, "workflow/lib/" + name) for name in ("identification_review.py", "aware_bundle.py", "aware_preservation.py", "aware_statistics.py", "aware_output_report.py")], SAMPLE_SHEET,
         [file_identity(p) for iso in SAMPLES for p in illumina_r1_files(iso) + illumina_r2_files(iso) + nanopore_files(iso) + manifest_long_files(iso, "pacbio")],
         [file_identity(p) for p in DB_CORE])
     if REVIEW_DECISION is not None:
@@ -4535,7 +4535,7 @@ rule aware_complete:
         directory(os.path.join(reports_dir("{isolate}"), "aware"))
     params:
         preservation=AWARE_PRESERVE, statistics=AWARE_STATISTICS,
-        source=lambda wc: hashlib.sha256("".join(Path(os.path.join(SOURCE_ROOT, "workflow/lib/" + name)).read_text() for name in ("aware_bundle.py", "aware_preservation.py", "aware_statistics.py")).encode()).hexdigest()
+        source=lambda wc: hashlib.sha256("".join(Path(os.path.join(SOURCE_ROOT, "workflow/lib/" + name)).read_text() for name in ("aware_bundle.py", "aware_preservation.py", "aware_statistics.py", "aware_output_report.py")).encode()).hexdigest()
     benchmark:
         bench("{isolate}", "aware_complete")
     run:

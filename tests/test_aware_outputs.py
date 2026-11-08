@@ -90,3 +90,13 @@ def test_retained_complementary_library_metadata(tmp_path):
 
     long_id=mapper.manifest('primary','s'*100+'_aware_primary')['samples'][0]['sample_id']
     assert len(long_id)<=100 and long_id.startswith('s')
+
+
+def test_completed_bundle_records_actual_filtering(tmp_path):
+    path,env=prepare(tmp_path,{'sample':'illumina_only'},polish='none',pp=False,kraken=True)
+    cfg=yaml.safe_load(path.read_text());cfg.update(aware_run_until='aware',aware_statistics=True)
+    path.write_text(yaml.safe_dump(cfg));run(tmp_path,env)
+    doc=verify_bundle(tmp_path/'sample/reports/aware/manifest.json')
+    assert doc['filtering']['selected_target_taxid']
+    html=(tmp_path/'sample/reports/aware/report.html').read_text()
+    assert 'Selected target and actual filtering' in html and '95% Wilson interval' in html

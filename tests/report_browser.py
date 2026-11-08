@@ -29,4 +29,16 @@ with tempfile.TemporaryDirectory() as tmp:
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.screenshot(path='ui-previews/hybas-report-mobile.png',full_page=True)
         assert not errors,errors
+        from test_aware_output_report import fixture as aware_fixture
+        from aware_output_report import render
+        aware=root/'aware.html';aware.write_text(render(aware_fixture()))
+        page.set_viewport_size({'width':1440,'height':1000});page.goto(aware.as_uri())
+        assert page.get_by_role('heading',name='Selected target and actual filtering').is_visible()
+        assert page.get_by_role('cell',name='Manual choice · TaxID 22',exact=True).is_visible()
+        page.get_by_role('link',name='Retained groups',exact=True).click()
+        page.screenshot(path='ui-previews/aware-outputs-desktop.png',full_page=True)
+        page.set_viewport_size({'width':390,'height':844})
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        page.screenshot(path='ui-previews/aware-outputs-mobile.png',full_page=True)
+        assert not errors,errors
         browser.close()
