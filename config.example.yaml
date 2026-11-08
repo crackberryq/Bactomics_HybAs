@@ -52,3 +52,8 @@ kraken_mem_mb: auto
 busco_mem_mb: auto
 prokka_mem_mb: auto
 min_fasta_length: 1000
+
+# HybAs 10 is experimental: all input modes, polishing paths and AWARE+.
+# off | taxonomy | auto | split; reconstruct is not implemented.
+# Omit aware_mode (or use legacy) to preserve an older configuration.
+aware_mode: auto

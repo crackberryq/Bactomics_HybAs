@@ -29,16 +29,19 @@ def render(document):
     primary = next((g for g in document['groups'] if g['id']=='primary'), {})
     selected = actual.get('selected_target_taxid')
     selected_name = actual.get('selected_target_name')
-    body = '<header><p class="brand">Powered by GenoMix Human Link</p><h1>HybAs AWARE</h1><p>'+esc(document['isolate'])+' · AWARE stage complete</p></header>'
+    body = '<header><p class="brand">Powered by GenoMix Human Link</p><h1>HybAs 10 — Experimental · AWARE+</h1><p>'+esc(document['isolate'])+' · AWARE stage complete</p></header>'
     body += '<nav aria-label="Report sections"><a href="#target">Target & filtering</a><a href="#groups">Retained groups</a><a href="#statistics">Statistical evidence</a><a href="#next">Next steps</a></nav>'
     body += '<p class="notice">This report records the completed AWARE stage. It does not establish that assembly or downstream analysis completed. Check the saved run status in Bactologix.</p>'
     body += '<section id="target"><h2>Selected target and actual filtering</h2>'
     body += table(['Evidence','Value'], [
+        ['AWARE+ mode',actual.get('aware_mode', 'legacy')],
         ['Selection mode',actual.get('kraken_decision_mode')],
         ['Selected target',f'{selected_name or "Not recorded"} · TaxID {selected or "Not recorded"}'],
         ['Selection source',actual.get('selected_target_source')],
         ['Automatic recommendation',f'{recommendation.get("name") or "Not recorded"} · TaxID {recommendation.get("taxid") or "Not recorded"}'],
-        ['Existing AWARE confidence label',actual.get('decision_confidence')]])
+        ['Assignment support',actual.get('decision_confidence')],
+        ['Platform evidence', 'Single-platform evidence; cross-platform agreement unavailable' if actual.get('platform_agreement_reason') == 'single_platform_not_assessed' else actual.get('platform_agreement_reason')]])
+    body += '<p>Assignment support describes database-dependent read assignments, not the probability of correct identification. All HybAs 10 input modes, polishing paths and AWARE+ features remain experimental and require validation.</p>'
     body += table(['Platform','Cleaning action','Reason','Retained units'], [[p,actual.get(p+'_kraken_decision'),actual.get(p+'_kraken_decision_reason'),f'{n:,} '+('pairs' if p=='illumina' else 'reads')] for p,n in primary.get('units',{}).items()])
     body += '<p>Actions above are the recorded per-platform cleaning decisions. Automatic recommendations and statistical evidence are shown separately.</p></section>'
     body += '<section id="groups"><h2>Retained groups</h2><p>'+esc(document['limitation'])+'</p><p>The primary output can overlap species groups; these are not independent replicates. Shared and unclassified groups are retained for inspection/export.</p>'

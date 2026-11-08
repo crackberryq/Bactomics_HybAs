@@ -191,7 +191,14 @@ class SettingsResolution:
                            "created_at": datetime.now(timezone.utc).isoformat(),
                            "capacity_at_resolution": self.capacity, "scheduler_at_resolution": self.scheduler,
                            "resolved_config": deepcopy(self.requested), "decisions": {}, "sample_plans": {}}
+            from aware_modes import resolve
+            self.record["resolved_config"] = resolve(self.record["resolved_config"])
             self._resolve()
+            effective = resolve(self.record["resolved_config"])
+            for key, value in effective.items():
+                if value != self.record["resolved_config"].get(key):
+                    self.record["decisions"][key] = {"requested": self.requested.get(key), "value": value, "source": "aware_mode", "reason": "Explicit AWARE+ mode"}
+            self.record["resolved_config"] = effective
         self.config = deepcopy(self.record["resolved_config"])
         if (self.reused and self.config["run_kraken"] and self.config["kraken_decision_mode"] != "off"
                 and is_auto(self.requested.get("kraken_mem_mb", "auto"))

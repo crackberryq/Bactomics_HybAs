@@ -60,6 +60,7 @@ from datetime import datetime
 from computational import install_recorder, render_report
 from settings import SettingsResolution, resource_value
 from input_manifest import load_manifest
+from aware_modes import resolve as resolve_aware_mode
 from library_inputs import execution_samples
 from snakemake.io import report, directory, touch
 
@@ -85,7 +86,7 @@ SETTINGS = SettingsResolution({k: v for k, v in config.items() if k not in REVIE
     cores=resource_value(workflow.global_resources, "_cores"),
     mem_mb=resource_value(workflow.global_resources, "mem_mb"))
 config.clear()
-config.update(SETTINGS.config)
+config.update(resolve_aware_mode(SETTINGS.config))
 config.update(REVIEW_ARGUMENTS)
 workflow.global_resources["mem_mb"] = SETTINGS.memory_budget
 workflow.global_resources["_cores"] = SETTINGS.cpu_budget
@@ -124,6 +125,8 @@ RUN_POLYPOLISH           = as_bool(config.get("run_polypolish", True))
 SETUP_ONLY               = as_bool(config.get("setup_only", False))
 ADMIN_MODE               = as_bool(config.get("admin_mode", False))
 CI_MODE                  = as_bool(config.get("ci_mode", False))
+AWARE_MODE = config.get("aware_mode", "legacy")
+AUTO_REVIEW = AWARE_MODE == "auto"
 REVIEW_ENABLED = as_bool(config.get("kraken_review_before_filtering", False))
 REVIEW_DECISION_PATH = str(config.get("kraken_review_decision", ""))
 REVIEW_DECISION = review_support.load_decision(REVIEW_DECISION_PATH, config.get("kraken_review_decision_sha256")) if REVIEW_DECISION_PATH else None
@@ -134,7 +137,7 @@ if AWARE_UNTIL not in {"assembly", "aware"}:
 AWARE_PRESERVE = as_bool(config.get("aware_preserve_groups", False))
 AWARE_STATISTICS = as_bool(config.get("aware_statistics", False))
 AWARE_CONTINUATION = str(config.get("aware_assembly_continuation", ""))
-AWARE_OUTPUTS = AWARE_UNTIL == "aware" or AWARE_PRESERVE or AWARE_STATISTICS
+AWARE_OUTPUTS = AWARE_MODE in {"taxonomy", "auto", "split"} or AWARE_UNTIL == "aware" or AWARE_PRESERVE or AWARE_STATISTICS
 AWARE_STOPPING = AWARE_UNTIL == "aware" and not AWARE_CONTINUATION
 ASSEMBLY_PENDING = REVIEW_WAITING or AWARE_STOPPING
 
@@ -176,7 +179,7 @@ VALID_KRAKEN_DECISION_MODES = {"off", "manual", "auto", "aware"}
 if (REVIEW_ENABLED or AWARE_OUTPUTS) and (not RUN_KRAKEN or KRAKEN_DECISION_MODE == "off"):
     raise ValueError("AWARE output and identification review require Kraken to be enabled")
 if REVIEW_DECISION is not None:
-    if not REVIEW_ENABLED:
+    if not (REVIEW_ENABLED or AUTO_REVIEW):
         raise ValueError("An identification decision requires review mode")
     KRAKEN_DECISION_MODE = REVIEW_DECISION["mode"]
     DEFAULT_TARGET_TAXID = REVIEW_DECISION["taxid"] if KRAKEN_DECISION_MODE == "manual" else ""
@@ -457,6 +460,8 @@ def combine_platform_values(val_illumina, val_ont, use_both=True):
 def choose_platform_cleaning_decision(mode, selected_taxid, platform_pct, platform_name):
     selected_taxid = normalize_taxid(selected_taxid)
 
+    if globals().get("AWARE_MODE") in {"taxonomy", "split"}:
+        return ("passthrough", f"{platform_name}_taxonomy_only_no_filtering")
     if mode == "off":
         return ("passthrough", f"{platform_name}_mode_off")
 
@@ -1068,12 +1073,23 @@ def compute_taxonomic_confidence(illumina_report, ont_report, selected_taxid):
     selected_pct_i = parse_kraken_report_target_fraction(illumina_report, selected_taxid)
     selected_pct_o = parse_kraken_report_target_fraction(ont_report, selected_taxid)
     selected_pct = min(selected_pct_i, selected_pct_o) if KRAKEN_AUTO_USE_BOTH_PLATFORMS else max(selected_pct_i, selected_pct_o)
+    single_platform = False
+    if globals().get("AWARE_MODE", "legacy") != "legacy":
+        present = [bool(parse_kraken_report_rows(p)) for p in (illumina_report, ont_report)]
+        single_platform = sum(present) == 1
+        values = [v for v, active in zip((selected_pct_i, selected_pct_o), present) if active]
+        selected_pct = (min(values) if KRAKEN_AUTO_USE_BOTH_PLATFORMS else max(values)) if values else 0.0
 
     runner_candidates = []
     for x in [top1_i, top2_i, top1_o, top2_o]:
         if x and normalize_taxid(x["taxid"]) != selected_taxid:
             runner_candidates.append(x)
 
+    if globals().get("AWARE_MODE", "legacy") != "legacy":
+        all_rows = parse_kraken_report_rows(illumina_report) + parse_kraken_report_rows(ont_report)
+        selected_rank = next((r["rank"] for r in all_rows if r["taxid"] == selected_taxid), None)
+        # Compare alternative taxa at the selected rank, not overlapping ancestors.
+        runner_candidates = [r for r in all_rows if r["rank"] == selected_rank and r["taxid"] != selected_taxid]
     runner_candidates = sorted(runner_candidates, key=lambda x: x["pct"], reverse=True)
     runner = runner_candidates[0] if runner_candidates else None
     runner_pct = runner["pct"] if runner else 0.0
@@ -1081,7 +1097,9 @@ def compute_taxonomic_confidence(illumina_report, ont_report, selected_taxid):
 
     agreement_score, agreement_reason = compute_platform_agreement(illumina_report, ont_report)
 
-    if selected_pct >= KRAKEN_AWARE_HIGH_TARGET_MIN_PCT and delta_pct >= KRAKEN_AWARE_DELTA_MIN_PCT and agreement_score >= 0.5:
+    if single_platform:
+        agreement_reason = "single_platform_not_assessed"
+    if selected_pct >= KRAKEN_AWARE_HIGH_TARGET_MIN_PCT and delta_pct >= KRAKEN_AWARE_DELTA_MIN_PCT and (agreement_score >= 0.5 or single_platform):
         confidence = "high"
         state = "clean_stable"
     elif selected_pct >= KRAKEN_AWARE_MODERATE_TARGET_MIN_PCT and delta_pct >= KRAKEN_AWARE_MODERATE_DELTA_MIN_PCT:
@@ -1203,11 +1221,23 @@ _controller_blocks.append(_controller_source[
     _controller_source.index("def parse_kraken_report_rows("):
     _controller_source.index("def normalize_tool_version_string(")])
 _controller_blocks.append(Path(SUPPORT_FILE).read_text().split("def manual_taxid", 1)[0])
+AWARE_SETTINGS["aware_mode"] = AWARE_MODE
 AWARE_CODE_HASH = hashlib.sha256("\n".join(_controller_blocks).encode()).hexdigest()
 
+def requested_outputs(wc):
+    review_outputs = expand(os.path.join(reports_dir("{isolate}"), "identification", "review.json"), isolate=SAMPLES) + expand(os.path.join(reports_dir("{isolate}"), "identification", "report.html"), isolate=SAMPLES)
+    if REVIEW_WAITING:
+        return review_outputs
+    if AUTO_REVIEW and REVIEW_DECISION is None and not (SETUP_ONLY or ADMIN_MODE):
+        evidence = checkpoints.identification_review.get(isolate=SAMPLES[0]).output.json
+        if json.loads(Path(evidence).read_text())["awaiting_review"]:
+            return review_outputs
+    if AWARE_STOPPING:
+        return expand(os.path.join(reports_dir("{isolate}"), "aware"), isolate=SAMPLES)
+    return [p for item in rules.assembly_all.input for p in (item(wc) if callable(item) else [item])]
+
 rule all:
-    input:
-        lambda wc: expand(os.path.join(reports_dir("{isolate}"), "identification", "review.json"), isolate=SAMPLES) + expand(os.path.join(reports_dir("{isolate}"), "identification", "report.html"), isolate=SAMPLES) if REVIEW_WAITING else (expand(os.path.join(reports_dir("{isolate}"), "aware"), isolate=SAMPLES) if AWARE_STOPPING else [p for item in rules.assembly_all.input for p in (item(wc) if callable(item) else [item])])
+    input: requested_outputs
 
 rule assembly_all:
     input:
@@ -1405,10 +1435,10 @@ SETTINGS.set_sample_plans({iso: {
 # database identity use the same metadata contract as the ordinary workflow.
 REVIEW_CONTEXT = None
 if (REVIEW_ENABLED or AWARE_OUTPUTS) and not (SETUP_ONLY or ADMIN_MODE):
-    if REVIEW_ENABLED and len(SAMPLES) != 1:
+    if (REVIEW_ENABLED or AUTO_REVIEW) and len(SAMPLES) != 1:
         raise ValueError("Identification review requires one sample per run; create separate reviewed runs for a batch")
     REVIEW_CONTEXT = review_support.context(config,
-        SOURCE_FILES + SAMPLE_FILES + [os.path.join(SOURCE_ROOT, "workflow/lib/" + name) for name in ("identification_review.py", "aware_bundle.py", "aware_preservation.py", "aware_statistics.py", "aware_output_report.py")], SAMPLE_SHEET,
+        SOURCE_FILES + SAMPLE_FILES + [os.path.join(SOURCE_ROOT, "workflow/lib/" + name) for name in ("identification_review.py", "aware_bundle.py", "aware_preservation.py", "aware_statistics.py", "aware_output_report.py", "aware_modes.py")], SAMPLE_SHEET,
         [file_identity(p) for iso in SAMPLES for p in illumina_r1_files(iso) + illumina_r2_files(iso) + nanopore_files(iso) + manifest_long_files(iso, "pacbio")],
         [file_identity(p) for p in DB_CORE])
     if REVIEW_DECISION is not None:
@@ -1428,6 +1458,11 @@ def assembly_authorization(wc):
 def review_authorization(wc):
     if REVIEW_WAITING:
         raise ValueError("Awaiting researcher review: choose a target before filtering or assembly")
+    if AUTO_REVIEW and REVIEW_DECISION is None:
+        evidence = checkpoints.identification_review.get(isolate=wc.isolate).output.json
+        if json.loads(Path(evidence).read_text())["awaiting_review"]:
+            raise ValueError("Awaiting researcher review: ambiguous AWARE+ recommendation; review identification before continuing")
+        return [evidence]
     return [REVIEW_DECISION_PATH] if REVIEW_DECISION_PATH else []
 
 ###############################################################################
@@ -2606,8 +2641,12 @@ rule kraken_decision:
             selected_taxid=target_info["selected_taxid"],
         )
 
+        if AWARE_MODE in {"taxonomy", "split"}:
+            combined_decision, combined_reason = "passthrough", "taxonomy_only_no_filtering"
         with open(output[0], "w", encoding="utf-8") as out:
             out.write("field\tvalue\n")
+            out.write(f"aware_mode\t{AWARE_MODE}\n")
+            out.write("release_status\texperimental\n")
             out.write(f"isolate\t{iso}\n")
             out.write(f"long_read_platform\t{long_platform(iso)}\n")
             out.write(f"kraken_decision_mode\t{KRAKEN_DECISION_MODE}\n")
@@ -4036,6 +4075,8 @@ rule run_summary:
             "kraken_platform_agreement_score": kraken_decision_stats.get("platform_agreement_score", "NA"),
             "kraken_platform_agreement_reason": kraken_decision_stats.get("platform_agreement_reason", "NA"),
             "kraken_decision_confidence": kraken_decision_stats.get("decision_confidence", "NA"),
+            "release_status": "experimental",
+            "aware_mode": AWARE_MODE,
             "kraken_awareness_state": kraken_decision_stats.get("awareness_state", "NA"),
 
             "run_busco": RUN_BUSCO,
@@ -4488,7 +4529,7 @@ rule hybas_report:
         write_report(iso_dir(wildcards.isolate), os.path.dirname(output.html))
 
 
-rule identification_review:
+checkpoint identification_review:
     input:
         illumina=os.path.join(kraken_dir("{isolate}"), "illumina.report.txt"),
         ont=lambda wc: long_report(wc.isolate),
@@ -4515,13 +4556,17 @@ rule identification_review:
                     raise ValueError("Kraken reports disagree on taxon identity: " + row["taxid"])
                 entry[platform_name + "_pct"] = row["pct"]
         for row in rows_by_id.values():
-            row["manual_actions"] = {p: "whitelist_filter" if present else "not_applicable" for p, present in active.items()}
+            row["manual_actions"] = {p: ("passthrough" if AWARE_MODE in {"taxonomy", "split"} else "whitelist_filter") if present else "not_applicable" for p, present in active.items()}
         target = choose_selected_kraken_target("aware", "", input.illumina, input.ont)
         recommendation = dict(taxid=target["selected_taxid"], name=target["selected_name"], rank=target["selected_rank"],
             reason=target["selection_reason"], actions={p: choose_platform_cleaning_decision("aware", target["selected_taxid"], target[("ont" if p == "pacbio" else p) + "_selected_pct"], p)[0] if present else "not_applicable" for p, present in active.items()})
+        support = compute_taxonomic_confidence(input.illumina, input.ont, target["selected_taxid"])
+        recommendation["assignment_support"] = support["decision_confidence"]
+        recommendation["platform_evidence"] = support["platform_agreement_reason"]
+        needs_review = REVIEW_ENABLED or (AUTO_REVIEW and (support["decision_confidence"] == "low" or support["platform_agreement_reason"] == "discordant_targets"))
         review_support.write_report(output.json, output.html, iso, REVIEW_CONTEXT,
             sorted(rows_by_id.values(), key=lambda x: (-max(x["illumina_pct"], x[long_name + "_pct"]), x["taxid"])),
-            recommendation, [input.illumina, input.ont, *input.assignments, *input.merged], KRAKEN_INCLUDE_CHILDREN, active, library_plan=MANIFEST_SAMPLES.get(iso), awaiting_review=REVIEW_ENABLED)
+            recommendation, [input.illumina, input.ont, *input.assignments, *input.merged], KRAKEN_INCLUDE_CHILDREN, active, library_plan=MANIFEST_SAMPLES.get(iso), awaiting_review=needs_review)
 
 
 rule aware_complete:
@@ -4535,7 +4580,7 @@ rule aware_complete:
         directory(os.path.join(reports_dir("{isolate}"), "aware"))
     params:
         preservation=AWARE_PRESERVE, statistics=AWARE_STATISTICS,
-        source=lambda wc: hashlib.sha256("".join(Path(os.path.join(SOURCE_ROOT, "workflow/lib/" + name)).read_text() for name in ("aware_bundle.py", "aware_preservation.py", "aware_statistics.py", "aware_output_report.py")).encode()).hexdigest()
+        source=lambda wc: hashlib.sha256("".join(Path(os.path.join(SOURCE_ROOT, "workflow/lib/" + name)).read_text() for name in ("aware_bundle.py", "aware_preservation.py", "aware_statistics.py", "aware_output_report.py", "aware_modes.py")).encode()).hexdigest()
     benchmark:
         bench("{isolate}", "aware_complete")
     run:

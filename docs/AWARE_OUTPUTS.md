@@ -48,3 +48,21 @@ Database bias, duplicated molecules, correlated reads and sampling bias are not 
 ## Unified stage report
 
 The report distinguishes the actual selected target and per-platform cleaning actions from the automatic recommendation. It presents retained groups, library identities, support intervals and selection stability as readable tables. The report is a completed AWARE-stage record; assembly completion is determined by the saved run, not by the existence of this HTML file. Bactologix Methods exports verify stage-receipt checksums and include the corresponding evidence in reproducibility ZIPs.
+
+## AWARE+ modes (HybAs 10 experimental)
+
+All HybAs 10 input modes, polishing paths and AWARE+ features are experimental. Software checks do not constitute analytical validation.
+
+Set `aware_mode` to `off`, `taxonomy`, `auto`, or `split`. Omitting it, or using `legacy`, preserves earlier configuration behaviour.
+
+- **Off** skips Kraken and taxonomic filtering, clears AWARE stopping/review/extensions, and retains ordinary preprocessing.
+- **Taxonomy only** produces taxonomy/recommendations and the AWARE+ report, retaining reads without taxonomic filtering. Optional review and stop-after-AWARE remain available.
+- **Auto filter** uses the existing per-platform cleaning thresholds. High-purity inputs may pass through. Weak support or discordant targets stop successfully at identification review; confirmed decisions resume the same run. Automatic review currently requires one sample per run (Bactologix creates separate sample runs).
+- **Split by taxonomy** preserves provisional species groups and separate shared/ambiguous and unclassified pools, then stops for researcher selection of derived samples. It does not duplicate ambiguous DNA into every group and does not establish separate isolates. Explicit parent continuation remains possible.
+- **Reconstruct populations** is not implemented and is rejected if requested.
+
+The explicit mode controls Kraken enablement and preservation; underlying legacy switches cannot override it. Manual target selection is available through the independent review control. In taxonomy/split, selecting a target does not enable filtering.
+
+For new modes, assignment support uses available platforms and compares alternative taxa at the selected rank. An absent platform is labelled `single_platform_not_assessed`, not disagreement. These database-dependent support labels are not probabilities of correct identification. Existing legacy confidence/action calculations remain unchanged for reproducibility.
+
+Auto mode uses a classification checkpoint. Before managed execution, Bactologix prepares/checks both `all` and `setup_envs` to include downstream environments before the checkpoint resolves. Native CLI users can prepare the configured environments with the `setup_envs` target and the usual Conda preparation options.

@@ -217,7 +217,7 @@ def generate(isolate, output_dir, with_audit):
         "<a href='#overview'>01 · Overview</a><a href='#aware'>02 · AWARE decisions</a>"
         "<a href='#removed'>03 · Removed reads</a><a href='#assembly'>04 · Assembly & polishing</a>"
         "<a href='#provenance'>05 · Evidence files</a></aside><main>"
-        "<div class='hero'><h1>" + esc(isolate.name) + "</h1><p>HybAs Research Report · local, read-only evidence dashboard</p></div>"
+        "<div class='hero'><h1>" + esc(isolate.name) + "</h1><p>HybAs 10 — Experimental · AWARE+ research report · input modes and polishing require validation</p></div>"
         "<section id='overview'><h2>Overview</h2><div class='grid'>" + stats + "</div></section>"
         "<section id='aware'><h2>AWARE decision explorer</h2><div class='panel'>"
         "<p class='note'>Target election, per-platform read actions and conservative confidence are separate outputs. "

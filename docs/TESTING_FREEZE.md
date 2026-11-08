@@ -26,3 +26,7 @@ Run each dataset in its own output directory. Compare regular AWARE and enabled 
 The Bactologix repository provides `scripts/package_development_pair.py`. It builds source archives and an application wheel from explicit immutable commits, plus a pair manifest and checksums. It never publishes, changes the stable channel or grants managed execution approval.
 
 Before managed GUI testing of a newly packaged HybAs source, complete its exact-commit native adapter CI and add the corresponding prerelease compatibility entry through the official release process. Before release qualification, complete the reference-data matrix and document unresolved limitations. Existing source-bound runs remain tied to their original versions.
+
+## Updated experimental scope: AWARE+ modes
+
+Include Off, Taxonomy only, Auto filter and Split by taxonomy in the testing matrix across supported inputs and polishing combinations. Check strong single-platform support, discordant/ambiguous auto pause, explicit review/resume, mode-specific retention, separate shared pools, derived-sample defaults and legacy configuration compatibility. Reconstruct is unavailable, not an implemented experimental mode. No HybAs 10 combination is promoted as analytically validated by these software checks.

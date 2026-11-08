@@ -1,1 +1,1 @@
-{"interface":1,"bundle":"reports/aware/manifest.json","schema":"hybas-aware-bundle-v1","continuation_schema":"hybas-aware-continuation-v1"}
+{"interface": 1, "bundle": "reports/aware/manifest.json", "schema": "hybas-aware-bundle-v1", "continuation_schema": "hybas-aware-continuation-v1", "modes_interface": 1, "modes": ["off", "taxonomy", "auto", "split"], "reconstruct": "not_implemented"}

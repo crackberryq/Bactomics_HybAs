@@ -79,6 +79,7 @@ def verify_decision(decision, current_context, isolate, full=True):
 def write_report(path, html_path, isolate, context_id, rows, recommendation, files, include_children, platforms, library_plan=None, awaiting_review=True):
     doc = dict(schema=SCHEMA, isolate=isolate, created=datetime.now(timezone.utc).isoformat(),
                context=context_id, candidates=rows, recommendation=recommendation,
+               awaiting_review=awaiting_review, release_status="experimental",
                include_children=include_children, platforms=platforms,
                files=[identity(p) for p in files], library_plan=library_plan)
     p = Path(path); p.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +92,7 @@ def write_report(path, html_path, isolate, context_id, rows, recommendation, fil
     Path(html_path).write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
         '<title>HybAs identification review</title><style>body{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:1rem;color:#18372b;background:#fff}'
         'table{border-collapse:collapse;width:100%}td,th{padding:.6rem;text-align:left;border-bottom:1px solid #ccc}h1{color:#17664c}</style>'
-        '<h1>HybAs AWARE · Identification review</h1><p>Sample: ' + esc(isolate) + '</p><h2>Identification evidence</h2>' +
+        '<h1>HybAs 10 — Experimental · AWARE+ identification</h1><p>Sample: ' + esc(isolate) + '</p><h2>Identification evidence</h2>' +
         ('<p>Filtering and assembly have not started. Return to Bactologix to choose a target and continue.</p>' if awaiting_review else '<p>Original identification evidence retained for the AWARE output bundle.</p>') +
         '<p>AWARE recommendation: ' + esc(recommendation.get('name') or 'No supported candidate') + ' · TaxID ' + esc(recommendation.get('taxid') or '—') + '</p>'
         '<p>Percentages are Kraken clade assignments. Nested taxa overlap and must not be added. Illumina units are pairs; long-read units are reads. '
