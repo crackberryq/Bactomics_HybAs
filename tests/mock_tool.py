@@ -81,6 +81,11 @@ elif tool == 'unicycler':
     write(Path(arg('-o'))/'assembly.fasta','>fixture\n'+'A'*1200+'\n')
 elif tool == 'minimap2': print('fixture\t4\t0\t4\t+\tfixture\t1200\t0\t4\t4\t4\t60')
 elif tool == 'racon': sys.stdout.write(extend(args[-1],'C'))
+elif tool == 'medaka':
+    assert args[:2] == ['tools', 'resolve_model']
+    model = Path(os.environ['HYBAS_TEST_CALLS']).with_name('fixture-model.tar.gz')
+    if not model.exists(): model.write_text('synthetic model identity, no biological inference')
+    print(model)
 elif tool == 'medaka_consensus': write(Path(arg('-o'))/'consensus.fasta',extend(arg('-d'),'G'))
 elif tool == 'bwa':
     if args[0]=='index':

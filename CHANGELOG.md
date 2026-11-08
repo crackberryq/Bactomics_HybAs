@@ -1,3 +1,12 @@
+## HybAs AWARE 9.0.3 — Alpha, 2026-11-09
+
+- Fresh retained Medaka attempts prevent reuse of stale native intermediates.
+- Model selection records resolved model content and rejects silent automatic defaults when input metadata is absent or mixed.
+- QC output separates processing/evidence status from analytical suitability.
+- Legacy confidence compares same-rank alternatives, excluding overlapping ancestors, while preserving target election and independent platform cleaning.
+- BUSCO content identity invalidates stale results and is verified before/after execution.
+- This patch retains v9 modes and defaults; it does not introduce HybAs 10 features or promote the software to beta.
+
 ## HybAs AWARE 9.0.1
 
 ## HybAs AWARE 9.0.2 — Alpha

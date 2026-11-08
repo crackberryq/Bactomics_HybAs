@@ -50,3 +50,12 @@ def test_untrusted_labels_are_text_not_html():
     text=render_report(dict(isolate='<script>alert(1)</script>',workflow_version='old',kraken_selected_target_name='<img src=x onerror=alert(1)>'))
     assert '<script>alert(1)</script>' not in text and '<img src=x' not in text
     assert '&lt;script&gt;' in text
+
+
+def test_processing_checks_are_not_analytical_suitability():
+    data=dict(schema_version='hybas-report-1',summary=dict(isolate='sample',workflow_version='10',run_busco=True,busco_complete_percent=0,executed_stages=['medaka'],medaka_model_requested='reviewed',medaka_model_effective='effective.tar.gz',medaka_model_selection='explicit',medaka_input_metadata_status='mixed'),
+              tables={'qc_assessment':[{'check':'overall_qc_status','status':'PASS','detail':'legacy bookkeeping'}]})
+    text=render_report(data)
+    assert 'Not assessed against validated use-specific acceptance criteria' in text
+    assert 'legacy overall_qc_status is also a bookkeeping check' in text
+    assert 'Medaka model provenance' in text and 'effective.tar.gz' in text and 'mixed' in text

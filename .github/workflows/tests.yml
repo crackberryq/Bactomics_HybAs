@@ -54,10 +54,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="hybas-v9.0.2-AWARE"
+          tag="hybas-v9.0.3-AWARE"
           if gh release view "$tag" >/dev/null 2>&1; then
             git fetch origin "refs/tags/$tag:refs/tags/$tag"
             test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 9.0.2" --prerelease --notes-file docs/releases/v9.0.2-AWARE.md
+            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 9.0.3" --prerelease --notes-file docs/releases/v9.0.3-AWARE.md
           fi
