@@ -5,6 +5,7 @@ The [main README](../README.md) is the current 9.0.0-AWARE guide. Use the versio
 - [Install](INSTALL.md)
 - [Usage](USAGE.md)
 - [Configuration](CONFIGURATION.md)
+- [Auto settings and resume](AUTO_SETTINGS.md)
 - [Troubleshooting](TROUBLESHOOT.md)
 - [Repository structure](REPOSITORY_STRUCTURE.md)
 - [Changelog](../CHANGELOG.md)

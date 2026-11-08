@@ -50,3 +50,10 @@ def test_untrusted_labels_are_text_not_html():
     text=render_report(dict(isolate='<script>alert(1)</script>',workflow_version='old',kraken_selected_target_name='<img src=x onerror=alert(1)>'))
     assert '<script>alert(1)</script>' not in text and '<img src=x' not in text
     assert '&lt;script&gt;' in text
+
+
+def test_pacbio_report_retains_platform_and_assembler():
+    text=render_report(dict(isolate='sample',workflow_version='10',run_mode='pacbio_only',
+        long_read_platform='pacbio',assembler='flye',pacbio={'raw':{'reads':123,'bases':456},'cleaned':{'reads':100,'bases':400}},pacbio_selected_target_percent=88))
+    assert 'PacBio' in text and 'flye' in text and '123 reads' in text
+    assert 'Oxford Nanopore' not in text and 'After Filtlong' not in text and 'unicycler' not in text

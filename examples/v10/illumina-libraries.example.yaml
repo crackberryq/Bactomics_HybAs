@@ -1,0 +1,26 @@
+# Fictional paths. Independent preparations stay separate, even within one run.
+schema_version: 1
+samples:
+  - sample_id: example
+    mode: dual_illumina_complementary
+    libraries:
+      - library_id: short_insert
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        insert_size_bp: 300
+        read_groups:
+          - read_group_id: lane1
+            run_id: run_a
+            r1: reads/short_R1.fastq.gz
+            r2: reads/short_R2.fastq.gz
+      - library_id: longer_insert
+        platform: illumina
+        library_type: paired_end
+        orientation: fr
+        insert_size_bp: 600
+        read_groups:
+          - read_group_id: lane1
+            run_id: run_b
+            r1: reads/longer_R1.fastq.gz
+            r2: reads/longer_R2.fastq.gz
