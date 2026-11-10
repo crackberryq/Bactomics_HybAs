@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a3 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a4 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -91,7 +91,7 @@ REQUESTED_CONFIG = json.dumps(config, sort_keys=True, default=str)
 REVIEW_ARGUMENTS = {k: config[k] for k in ("kraken_review_decision", "kraken_review_decision_sha256", "aware_assembly_continuation", "aware_assembly_continuation_sha256") if k in config}
 SETTINGS = SettingsResolution({k: v for k, v in config.items() if k not in REVIEW_ARGUMENTS},
     cores=resource_value(workflow.global_resources, "_cores"),
-    mem_mb=resource_value(workflow.global_resources, "mem_mb"))
+    mem_mb=resource_value(workflow.global_resources, "mem_mb"), controller=workflow.is_main_process)
 config.clear()
 config.update(resolve_aware_mode(SETTINGS.config))
 config.update(REVIEW_ARGUMENTS)

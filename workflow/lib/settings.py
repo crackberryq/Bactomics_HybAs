@@ -155,6 +155,17 @@ def resource_value(resources, key):
     return getattr(value, "value", value)
 
 
+def swap_allowance(config):
+    """Read an explicit scheduler allowance; never reinterpret it as tool RAM."""
+    policy = config.get("bactologix_compute", {})
+    if not isinstance(policy, dict):
+        raise ValueError("bactologix_compute must be a mapping")
+    value = policy.get("swap_mb", 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("bactologix_compute.swap_mb must be a non-negative integer")
+    return value
+
+
 def kraken_memory_estimate(config, base):
     db = Path(base) / str(config.get("db_root", "db")) / str(config.get("kraken_db_name", "standard"))
     size = sum(p.stat().st_size for p in (db / f for f in ("hash.k2d", "opts.k2d", "taxo.k2d")) if p.is_file())
@@ -162,11 +173,11 @@ def kraken_memory_estimate(config, base):
 
 
 class SettingsResolution:
-    def __init__(self, requested, *, cores=None, mem_mb=None, capacity=None):
+    def __init__(self, requested, *, cores=None, mem_mb=None, capacity=None, controller=True):
         self.requested = json.loads(canonical(requested))
         self.capacity = capacity if capacity is not None else detect_capacity()
         mem_mb = positive_int(mem_mb, "Snakemake mem_mb") if mem_mb is not None else None
-        self.scheduler = {"cores": cores, "mem_mb": mem_mb}
+        self.swap_mb = swap_allowance(self.requested)
         base = Path(str(requested.get("base_dir", "."))).expanduser().absolute()
         sheet = requested.get("sample_sheet")
         sheet_path = Path(str(sheet)).absolute() if sheet else None
@@ -181,11 +192,28 @@ class SettingsResolution:
                            input_manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest())
         self.identity = {"policy_version": POLICY_VERSION, "requested_config": self.requested,
                          "request_context": context}
+        if self.swap_mb:
+            # Older source ignored this optional app policy. Do not reuse a
+            # record created before the scheduler/physical-RAM split existed.
+            self.identity["scheduler_memory_policy"] = "physical_ram_plus_explicit_swap_v1"
         self.settings_id = digest(self.identity)
         self.path = base / "provenance/runtime/resolved_settings" / (self.settings_id + ".json")
         self.reused = self.path.exists()
+        loaded = self._load() if self.reused else None
+        if self.swap_mb and not controller:
+            # Local run-block workers receive rule-scoped resources, not the
+            # controller's global budget. The controller persists this record
+            # before launching them; workers must never invent a new split.
+            if loaded is None:
+                raise ValueError("Swap-enabled worker requires the controller's frozen settings record")
+            mem_mb = self._saved_scheduler_budget(loaded)
+        if self.swap_mb and (mem_mb is None or mem_mb <= self.swap_mb):
+            raise ValueError("An additional swap allowance requires Snakemake --resources mem_mb "
+                             "to include both a positive RAM budget and that swap allowance")
+        self.ram_scheduler_mb = mem_mb - self.swap_mb if mem_mb is not None else None
+        self.scheduler = {"cores": cores, "mem_mb": mem_mb}
         if self.reused:
-            self.record = self._load()
+            self.record = loaded
         else:
             self.record = {"schema_version": 1, **deepcopy(self.identity), "settings_id": self.settings_id,
                            "created_at": datetime.now(timezone.utc).isoformat(),
@@ -205,13 +233,38 @@ class SettingsResolution:
                 and kraken_memory_estimate(self.config, base) != self.config["kraken_mem_mb"]):
             raise ValueError("Kraken database size changes the saved Auto memory estimate. Use a new settings_revision to resolve its current requirement; keep the old record for provenance.")
         ceilings = [self.config["total_mem_mb"]]
-        if mem_mb is not None:
-            ceilings.append(positive_int(mem_mb, "Snakemake mem_mb"))
+        if self.ram_scheduler_mb is not None:
+            ceilings.append(self.ram_scheduler_mb)
         if self.capacity["memory_limit_bytes"]:
             fraction = 0.8 if is_auto(self.requested.get("total_mem_mb", "auto")) else 1
             ceilings.append(int(self.capacity["memory_limit_bytes"] * fraction) // 1_000_000)
-        self.memory_budget = min(ceilings)
+        self.physical_memory_budget = min(ceilings)
+        self.memory_budget = self.physical_memory_budget + self.swap_mb
+        if not self.reused:
+            self.record["memory_policy_at_resolution"] = {
+                "requested_scheduler_mb": mem_mb,
+                "requested_ram_mb": self.ram_scheduler_mb,
+                "additional_swap_mb": self.swap_mb,
+                "effective_physical_ram_mb": self.physical_memory_budget,
+                "effective_scheduler_mb": self.memory_budget,
+                "capacity_check": "Native physical-RAM policy applied; usable swap must be checked by the launcher",
+            }
         self.cpu_budget = min(self.capacity["usable_cpus"], positive_int(cores, "Snakemake cores")) if cores else self.capacity["usable_cpus"]
+
+    def _saved_scheduler_budget(self, record):
+        try:
+            policy = record['memory_policy_at_resolution']
+            total = positive_int(policy['requested_scheduler_mb'], 'recorded scheduler budget')
+            ram = positive_int(policy['requested_ram_mb'], 'recorded RAM budget')
+            effective_ram = positive_int(policy['effective_physical_ram_mb'], 'recorded effective RAM budget')
+            effective_total = positive_int(policy['effective_scheduler_mb'], 'recorded effective scheduler budget')
+            if (policy['additional_swap_mb'] != self.swap_mb or total != ram + self.swap_mb
+                    or effective_total != effective_ram + self.swap_mb or effective_ram > ram
+                    or record['scheduler_at_resolution']['mem_mb'] != total):
+                raise ValueError('inconsistent RAM and swap split')
+            return total
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Cannot reuse controller swap scheduling receipt: {exc}") from exc
 
     def _load(self):
         try:
@@ -258,7 +311,7 @@ class SettingsResolution:
             cpus = min(cpus, positive_int(self.scheduler["cores"], "Snakemake cores"))
         self._integer("threads", cpus, "Available CPU affinity/cgroup capacity bounded by Snakemake cores")
         memory = self.capacity["memory_limit_bytes"]
-        manual_budget = self.scheduler["mem_mb"]
+        manual_budget = self.ram_scheduler_mb
         if memory:
             automatic_budget = max(1, int(memory * 0.8) // 1_000_000)
             if manual_budget is not None:
@@ -329,5 +382,6 @@ class SettingsResolution:
     def summary(self):
         return (f"[HybAs settings] {'Reusing' if self.reused else 'Previewing'} {self.settings_id[:12]}: "
                 f"threads={self.config['threads']}, scheduler cores={self.cpu_budget}, "
-                f"memory budget={self.memory_budget} MB, polish_mode={self.config['polish_mode']}. "
+                f"physical RAM budget={self.physical_memory_budget} MB, additional swap allowance={self.swap_mb} MB, "
+                f"effective scheduler memory budget={self.memory_budget} MB, polish_mode={self.config['polish_mode']}. "
                 f"Resolved settings: {self.path}")

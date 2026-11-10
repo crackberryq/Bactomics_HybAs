@@ -79,6 +79,67 @@ def settings_snapshots(tmp):
     return sorted((tmp/'provenance/runtime/resolved_settings').glob('*.json'))
 
 
+def test_pinned_scheduler_explicit_swap_preserves_oversized_kraken_guard(tmp_path):
+    """Exercise the shipped parser and automatic estimate, with no tool jobs."""
+    assert __import__('snakemake').__version__ == '9.27.1'
+    cfg, env = prepare(tmp_path, {'sample': 'hybrid'}, kraken=True)
+    data = yaml.safe_load(cfg.read_text())
+    db = tmp_path / 'db/kraken'
+    # A sparse, inert fixture supplies file sizes, not a biological database.
+    total = round((113868 - 1024 + .5) * 1048576 / 1.2)
+    others = sum((db / name).stat().st_size for name in ('opts.k2d', 'taxo.k2d'))
+    with (db / 'hash.k2d').open('r+b') as handle:
+        handle.truncate(total - others)
+    assert int(sum((db / name).stat().st_size for name in ('hash.k2d', 'opts.k2d', 'taxo.k2d')) / 1048576 * 1.2) + 1024 == 113868
+    for swap, succeeds in [(0, False), (98304, False), (131072, True)]:
+        data['bactologix_compute'] = {'swap_mb': swap}
+        cfg.write_text(yaml.safe_dump(data))
+        original = cfg.read_bytes()
+        result = run(tmp_path, env, '--dry-run', '--resources', f'mem_mb={4096 + swap}',
+                     'kraken_jobs=1', ok=succeeds)
+        if succeeds:
+            assert 'This was a dry-run' in result.stdout
+            assert 'Building DAG of jobs' in result.stdout
+        else:
+            assert 'kraken requires a 113868 MB reservation' in result.stdout
+        assert f'additional swap allowance={swap} MB' in result.stdout
+        assert calls(tmp_path) == []
+        assert cfg.read_bytes() == original
+        assert settings_snapshots(tmp_path) == []
+
+
+@pytest.mark.parametrize('policy,budget', [({'swap_mb': -1}, 4096), ({'swap_mb': True}, 4096),
+                                         ({'swap_mb': 131072}, 131072)])
+def test_pinned_scheduler_rejects_invalid_swap_before_any_tool(tmp_path, policy, budget):
+    assert __import__('snakemake').__version__ == '9.27.1'
+    cfg, env = prepare(tmp_path, {'sample': 'hybrid'}, kraken=True)
+    data = yaml.safe_load(cfg.read_text())
+    data['bactologix_compute'] = policy
+    cfg.write_text(yaml.safe_dump(data))
+    result = run(tmp_path, env, '--dry-run', '--resources', f'mem_mb={budget}', ok=False)
+    assert 'swap' in result.stdout and 'ValueError' in result.stdout
+    assert calls(tmp_path) == []
+    assert settings_snapshots(tmp_path) == []
+
+
+def test_swap_policy_survives_native_run_block_subprocess(tmp_path):
+    """Real local worker parsing; only the system-info rule executes."""
+    assert __import__('snakemake').__version__ == '9.27.1'
+    cfg, env = prepare(tmp_path, {'sample': 'illumina_only'}, polish='none')
+    data = yaml.safe_load(cfg.read_text())
+    data['bactologix_compute'] = {'swap_mb': 131072}
+    cfg.write_text(yaml.safe_dump(data))
+    run(tmp_path, env, 'global_system_info', '--resources', 'mem_mb=135168')
+    snapshots = settings_snapshots(tmp_path)
+    assert len(snapshots) == 1
+    recorded = json.loads(snapshots[0].read_text())
+    policy = recorded['memory_policy_at_resolution']
+    assert policy['requested_ram_mb'] == 4096
+    assert policy['additional_swap_mb'] == 131072
+    assert policy['effective_scheduler_mb'] == policy['effective_physical_ram_mb'] + 131072
+    assert all(row['tool'] == 'conda' for row in calls(tmp_path))
+
+
 @pytest.mark.parametrize('mode,polish,pp,expected,stages',[
     ('hybrid','tripolish',True,'CCGT',['racon1','racon2','medaka','polypolish']),
     ('hybrid','tripolish',False,'CCG',['racon1','racon2','medaka']),

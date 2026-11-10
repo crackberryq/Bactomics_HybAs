@@ -1,3 +1,5 @@
+> **Scheduling patch:** [10.0.0a4](docs/RELEASE_10.0.0a4.md) separates an explicitly declared swap allowance from native physical-RAM and tool settings.
+
 > **Native retention patch:** [10.0.0a3](docs/RELEASE_10.0.0a3.md) preserves reviewed Flye and BUSCO cleanup products and separate per-job diagnostics. Analysis arguments remain unchanged.
 
 > **Output retention update:** generated products survive failed jobs and reruns. See [retention locations and limits](docs/OUTPUT_RETENTION.md).
@@ -8,8 +10,8 @@
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
-**Development build: 10.0.0a3 — Alpha.** See the
-[release status](docs/RELEASE_10.0.0a3.md) and
+**Development build: 10.0.0a4 — Alpha.** See the
+[release status](docs/RELEASE_10.0.0a4.md) and
 [BaSIS-aligned update conventions](docs/RELEASE_CONVENTIONS.md).
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)

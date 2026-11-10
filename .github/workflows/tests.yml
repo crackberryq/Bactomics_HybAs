@@ -128,10 +128,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v10.0.0a3"
+          tag="v10.0.0a4"
           if gh release view "$tag" >/dev/null 2>&1; then
             git fetch origin "refs/tags/$tag:refs/tags/$tag"
             test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 10.0.0a3" --prerelease --notes-file docs/RELEASE_10.0.0a3.md
+            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 10.0.0a4" --prerelease --notes-file docs/RELEASE_10.0.0a4.md
           fi
