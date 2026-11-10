@@ -1,3 +1,7 @@
+## 9.0.6-AWARE — native output retention
+
+Preserve BUSCO 6.0.0 Python-managed cleanup products and separate stdout/stderr for every native job, including failed jobs. Source-checked launchers retain normal cleanup semantics and analysis arguments; retention failures stop the run. Native package contract tests gate publication. See [output retention](docs/OUTPUT_RETENTION.md) for exact scope and exclusions.
+
 ## 9.0.5-AWARE
 
 Use the executing Snakemake module version for retention compatibility and run version records. Accept known Conda distribution placeholders only with a supported runtime; reject contradictory versions. Native Conda controller checks now gate release publication. No analysis parameters change.

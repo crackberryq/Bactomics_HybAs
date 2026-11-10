@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs 9.0.5-AWARE (native Snakemake reliability update)
+# Snakefile – HybAs 9.0.6-AWARE (native output retention update)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -1129,6 +1129,8 @@ SAMPLE_FILES = [SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) e
 SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow", "lib", "workflow_support.py")
 SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE,
                 os.path.join(SOURCE_ROOT, "workflow/lib/artifact_retention.py"),
+                os.path.join(SOURCE_ROOT, "workflow/lib/native_output_retention.py"),
+                os.path.join(SOURCE_ROOT, "workflow/lib/busco_retention.py"),
                 os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
                 os.path.join(SOURCE_ROOT, "workflow/lib/resource_identity.py")]
 EFFECTIVE_CONFIG = json.dumps(config, sort_keys=True, default=str)
@@ -2887,6 +2889,8 @@ rule busco:
     input:
         asm=final_asm("{isolate}"),
         resource_code=os.path.join(SOURCE_ROOT, "workflow/lib/resource_identity.py"),
+        native_keeper=os.path.join(SOURCE_ROOT, "workflow/lib/busco_retention.py"),
+        retention_core=os.path.join(SOURCE_ROOT, "workflow/lib/native_output_retention.py"),
         support=SUPPORT_FILE,
         dataset=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]), item["path"]) for item in busco_content_identity(ISO_OVERRIDES[wc.isolate]["busco_lineage"])["files"]] if RUN_BUSCO else []
     output:
@@ -2927,7 +2931,7 @@ rule busco:
           exit 0
         fi
         python {input.resource_code:q} --path {params.lineage_path:q} --expected {params.content_sha:q}
-        busco -i "{input.asm}" \
+        python {input.native_keeper:q} --output-root {params.outdir:q} -- -i "{input.asm}" \
           -o "busco_{wildcards.isolate}" \
           --out_path "{params.outdir}" \
           -m genome \
