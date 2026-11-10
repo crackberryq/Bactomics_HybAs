@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs 9.0.4-AWARE (native Snakemake reliability update)
+# Snakefile – HybAs 9.0.5-AWARE (native Snakemake reliability update)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -3197,7 +3197,7 @@ rule tool_versions:
             return "NA"
 
         versions = {
-            "snakemake": __import__("importlib.metadata", fromlist=["version"]).version("snakemake"),
+            "snakemake": __import__("snakemake").__version__,
 
             "unicycler": parse_conda_list_version(input.assembly_list, "unicycler"),
             "racon": parse_conda_list_version(input.assembly_list, "racon"),
