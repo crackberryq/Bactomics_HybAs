@@ -1,0 +1,54 @@
+name: Native environment checks
+on:
+  push:
+    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml']
+  pull_request:
+    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [assembly, polishing, medaka, qc, annotation]
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          activate-environment: check
+          environment-file: workflow/envs/${{ matrix.environment }}.yml
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          conda-remove-defaults: true
+      - run: bash workflow/envs/${{ matrix.environment }}.post-deploy.sh
+
+  controller:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          activate-environment: hybas
+          environment-file: environment.yaml
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          conda-remove-defaults: true
+      - run: |
+          cp config.example.yaml config.yaml
+          cp examples/samples.example.tsv samples.tsv
+          snakemake --version
+          python -c 'import yaml; import snakemake'
+          snakemake -s Hybas.smk setup_envs --config setup_only=true --cores 2 -n
