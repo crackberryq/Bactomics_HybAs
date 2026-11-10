@@ -14,6 +14,18 @@ import sys
 tool = Path(sys.argv[0]).name
 args = sys.argv[1:]
 
+# Workflow-only fixtures delegate retention launchers to the existing contract
+# stubs. The shipped launchers have no bypass; their guards and native cleanup
+# calls are exercised separately against the real pinned packages in CI.
+if tool == 'python':
+    launchers = {'busco_retention.py': 'busco', 'flye_retention.py': 'flye'}
+    selected = launchers.get(Path(args[0]).name) if args else None
+    if selected:
+        marker = args.index('--')
+        executable = Path(sys.argv[0]).parent / selected
+        os.execv(str(executable), [str(executable), *args[marker+1:]])
+    os.execv(sys.executable, [sys.executable, *args])
+
 
 def arg(name, default=None):
     return args[args.index(name)+1] if name in args else default

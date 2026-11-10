@@ -1,4 +1,4 @@
-> **Conda controller patch:** [9.0.5-AWARE](docs/releases/v9.0.5-AWARE.md) accepts the verified runtime identity when Conda distribution metadata says `0.0.0` and records the correct engine version.
+> **Native retention patch:** [9.0.6-AWARE](docs/releases/v9.0.6-AWARE.md) preserves reviewed BUSCO cleanup products and separate per-job diagnostics. Analysis arguments remain unchanged.
 
 > **Output retention update:** generated products survive failed jobs and reruns. See [retention locations and limits](docs/OUTPUT_RETENTION.md).
 
@@ -6,7 +6,7 @@
 
 > **Branded report update:** [HybAs AWARE 9.0.1](docs/releases/v9.0.1-AWARE.md) adds a primary assembly report and saved-data rendering. MultiQC remains available.
 
-# HybAs 9.0.5-AWARE
+# HybAs 9.0.6-AWARE
 
 [![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
