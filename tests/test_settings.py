@@ -72,6 +72,103 @@ def test_explicit_values_win_without_silent_clipping(tmp_path):
     assert s.record["decisions"]["threads"]["source"] == "manual"
 
 
+def test_explicit_swap_changes_only_scheduler_not_tool_ram(tmp_path):
+    ram = resolve(tmp_path / 'ram', cores=12, mem_mb=28672)
+    swapped = resolve(tmp_path / 'swap', {'bactologix_compute': {'swap_mb': 98304}},
+                      cores=12, mem_mb=126976)
+    for name in ('total_mem_mb', 'assembly_mem_mb', 'spades_memory_gb',
+                 'polishing_mem_mb', 'busco_mem_mb', 'prokka_mem_mb', 'kraken_mem_mb'):
+        assert swapped.config[name] == ram.config[name]
+    assert swapped.physical_memory_budget == ram.memory_budget == 25600
+    assert swapped.memory_budget == 123904  # Keep native 80% physical RAM policy.
+    assert swapped.record['memory_policy_at_resolution'] == {
+        'requested_scheduler_mb': 126976, 'requested_ram_mb': 28672,
+        'additional_swap_mb': 98304, 'effective_physical_ram_mb': 25600,
+        'effective_scheduler_mb': 123904,
+        'capacity_check': 'Native physical-RAM policy applied; usable swap must be checked by the launcher',
+    }
+    assert 'physical RAM budget=25600' in swapped.summary()
+    assert 'additional swap allowance=98304' in swapped.summary()
+    assert 'effective scheduler memory budget=123904' in swapped.summary()
+
+
+def test_swap_does_not_suppress_explicit_physical_limits_or_spades_checks(tmp_path):
+    values = {'bactologix_compute': {'swap_mb': 98304}, 'total_mem_mb': 16000,
+              'assembly_mem_mb': 10000, 'spades_memory_gb': 7, 'polishing_mem_mb': 2000}
+    resolved = resolve(tmp_path, values, mem_mb=126976)
+    assert resolved.physical_memory_budget == 16000
+    assert resolved.memory_budget == 114304
+    assert resolved.config['assembly_mem_mb'] == 10000
+    assert resolved.config['spades_memory_gb'] == 7
+    assert resolved.config['polishing_mem_mb'] == 2000
+    with pytest.raises(ValueError, match='detected host/container'):
+        resolve(tmp_path, {**values, 'total_mem_mb': 40000}, mem_mb=126976)
+    with pytest.raises(ValueError, match='fit within'):
+        resolve(tmp_path, {**values, 'assembly_mem_mb': 1024}, mem_mb=126976)
+
+
+@pytest.mark.parametrize('policy', [None, [], 'swap', {'swap_mb': -1}, {'swap_mb': True},
+                                    {'swap_mb': '98304'}, {'swap_mb': 1.5}, {'swap_mb': None}])
+def test_malformed_swap_policy_is_rejected(tmp_path, policy):
+    with pytest.raises(ValueError, match='bactologix_compute'):
+        resolve(tmp_path, {'bactologix_compute': policy}, mem_mb=126976)
+
+
+@pytest.mark.parametrize('budget', [None, 98303, 98304])
+def test_swap_requires_an_explicit_positive_ram_portion(tmp_path, budget):
+    with pytest.raises(ValueError, match='positive RAM budget'):
+        resolve(tmp_path, {'bactologix_compute': {'swap_mb': 98304}}, mem_mb=budget)
+
+
+def test_zero_swap_preserves_ram_only_resolution(tmp_path):
+    ram = resolve(tmp_path / 'ram', mem_mb=12000)
+    zero = resolve(tmp_path / 'zero', {'bactologix_compute': {'swap_mb': 0}}, mem_mb=12000)
+    assert ram.memory_budget == zero.memory_budget == zero.physical_memory_budget == 12000
+    assert 'scheduler_memory_policy' not in zero.identity
+
+
+def test_swap_resume_preserves_record_and_rechecks_ram_ceiling(tmp_path):
+    values = {'bactologix_compute': {'swap_mb': 98304}}
+    first = resolve(tmp_path, values, mem_mb=126976)
+    first.persist()
+    original = first.path.read_bytes()
+    resumed = resolve(tmp_path, values, mem_mb=110304, capacity=capacity(memory_mb=16000))
+    assert resumed.reused
+    assert resumed.config == first.config
+    assert resumed.physical_memory_budget == 12000
+    assert resumed.memory_budget == 110304
+    assert resumed.record['memory_policy_at_resolution'] == first.record['memory_policy_at_resolution']
+    resumed.persist()
+    assert first.path.read_bytes() == original
+    assert resumed.identity['scheduler_memory_policy'] == 'physical_ram_plus_explicit_swap_v1'
+
+
+def test_swap_worker_reuses_controller_receipt_instead_of_rule_resource(tmp_path):
+    values = {'bactologix_compute': {'swap_mb': 98304}}
+    with pytest.raises(ValueError, match='controller.*frozen settings'):
+        resolve(tmp_path, values, mem_mb=1024, controller=False)
+    first = resolve(tmp_path, values, mem_mb=126976)
+    first.persist()
+    frozen = first.path.read_bytes()
+    worker = resolve(tmp_path, values, mem_mb=1024, controller=False)
+    assert worker.reused and worker.ram_scheduler_mb == 28672
+    assert worker.memory_budget == first.memory_budget
+    assert worker.config == first.config
+    assert first.path.read_bytes() == frozen
+
+
+def test_worker_rejects_a_missing_or_inconsistent_swap_receipt(tmp_path):
+    values = {'bactologix_compute': {'swap_mb': 98304}}
+    first = resolve(tmp_path, values, mem_mb=126976)
+    first.persist()
+    record = json.loads(first.path.read_text())
+    record.pop('record_sha256')
+    record['memory_policy_at_resolution']['requested_ram_mb'] += 1
+    first.path.write_text(json.dumps({**record, 'record_sha256': digest(record)}))
+    with pytest.raises(ValueError, match='controller swap scheduling receipt'):
+        resolve(tmp_path, values, mem_mb=1024, controller=False)
+
+
 @pytest.mark.parametrize("key,value", [("threads", True), ("threads", 0), ("threads", 1.5),
     ("total_mem_mb", -1), ("total_mem_mb", None), ("run_busco", "maybe"),
     ("run_prokka", 1), ("polish_mode", "guess"), ("run_mode", "unsupported_future_mode")])

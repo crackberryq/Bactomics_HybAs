@@ -1,3 +1,10 @@
+## 10.0.0a4 — explicit swap scheduling
+
+- Honor `bactologix_compute.swap_mb` as an additional scheduler allowance when the supplied Snakemake `mem_mb` contains both RAM and swap. Keep native physical-RAM ceilings, the 80% Auto policy, and all tool memory defaults separate and unchanged.
+- Record the requested RAM/swap split and effective scheduler budget in resolved-settings provenance; show the effective split in the controller log. Existing resolved records are retained unchanged.
+- Reject malformed allowances and a combined budget without a positive RAM portion. Retain the database-size reservation guard and exercise it with pinned Snakemake 9.27.1 dry runs.
+- Usable swap must be verified by the launcher. Bactologix performs current free-swap and container-limit checks; the standalone workflow does not measure or reserve swap.
+
 ## 10.0.0a3 — native output retention
 
 Preserve BUSCO 6.0.0 Python-managed cleanup products and separate stdout/stderr for every native job, including failed jobs. Preserve Flye 2.9.6 consensus/polishing intermediates and previous logs/parameter snapshots before its reviewed Python cleanup. Source-checked launchers retain normal cleanup semantics and analysis arguments; retention failures stop the run. Native package contract tests gate publication. See [output retention](docs/OUTPUT_RETENTION.md) for exact scope and exclusions.
