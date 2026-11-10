@@ -14,7 +14,6 @@ from pathlib import Path
 import platform as runtime_platform
 import re
 import resource
-import shutil
 import sqlite3
 import tempfile
 import time
@@ -338,13 +337,28 @@ def preserve(review, output, writer_limit=32):
         pass
     staging = None
     try:
-        staging = Path(tempfile.mkdtemp(prefix='.' + output.name + '-', dir=output.parent))
+        staging = Path(tempfile.mkdtemp(prefix=output.name + '.attempt-', dir=output.parent))
         document = _preserve(review, staging, writer_limit)
         if output.exists() or output.is_symlink():
             raise ValueError('Output appeared during preservation; existing results are retained')
         staging.rename(output); staging = None
         return document
-    finally:
+    except BaseException as exc:
         if staging is not None:
-            shutil.rmtree(staging)
+            record_failed_attempt(staging, output, exc)
+        raise
+    finally:
         lock.unlink()
+
+
+def record_failed_attempt(staging, output, exc):
+    """Retain unpublished products without presenting a failed attempt as a result."""
+    try:
+        (Path(staging) / 'failure.json').write_text(json.dumps({
+            'schema': 'hybas-unpublished-attempt-v1', 'status': 'failed',
+            'published': False, 'intended_output': str(output),
+            'error_type': type(exc).__name__, 'error': str(exc),
+            'recorded_at': datetime.now(timezone.utc).isoformat(),
+        }, indent=2) + '\n')
+    except OSError:
+        pass  # Do not mask the original error if, for example, the disk is full.

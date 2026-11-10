@@ -91,10 +91,12 @@ def execute(reads, draft, output, receipt, threads, requested='', runner=subproc
         record['status'] = 'completed'
         record['consensus_sha256'] = sha256_file(consensus)
         write_json(attempt / 'execution.json', record)
-        temporary = output.with_name(output.name + '.tmp')
+        # Promotion scratch belongs to this attempt. A failed promotion must not
+        # be overwritten by the next scheduled execution's scratch file.
+        temporary = attempt / 'consensus.publish.tmp'
         shutil.copyfile(consensus, temporary); os.replace(temporary, output)
         receipt.parent.mkdir(parents=True, exist_ok=True)
-        temporary = receipt.with_name(receipt.name + '.tmp')
+        temporary = receipt.with_name(receipt.name + '.' + attempt.name + '.tmp')
         write_json(temporary, record); os.replace(temporary, receipt)
         return record
     except Exception as exc:

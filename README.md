@@ -1,11 +1,13 @@
+> **Output retention update:** generated products survive failed jobs and reruns. See [retention locations and limits](docs/OUTPUT_RETENTION.md).
+
 # HybAs AWARE
 
 [![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
-**Development target: 10.0.0a1 — Alpha (unreleased).** See the
-[release status](docs/RELEASE_10.0.0a1.md) and
+**Development build: 10.0.0a2 — Alpha.** See the
+[release status](docs/RELEASE_10.0.0a2.md) and
 [BaSIS-aligned update conventions](docs/RELEASE_CONVENTIONS.md).
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)

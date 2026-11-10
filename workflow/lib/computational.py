@@ -167,7 +167,14 @@ def render_report(runtime_dir):
              for j in run["jobs"] for m in (j.get("measurements") or [{}])]))
         content.append("<small>Controller machine and runner: " + cell(json.dumps(run["machine"], sort_keys=True)) + "</small></details>")
     content.append("</html>")
-    atomic_text(Path(runtime_dir) / "computational_report.html", "\n".join(content))
+    report_path = Path(runtime_dir) / "computational_report.html"
+    if report_path.exists() or report_path.is_symlink():
+        # The completion callback also renders outside scheduled jobs. Preserve
+        # its previous document independently of the Snakemake preparation hook.
+        history = Path(runtime_dir) / "report_history"
+        history.mkdir(parents=True, exist_ok=True)
+        report_path.rename(history / ("computational-report-" + uuid.uuid4().hex + ".html"))
+    atomic_text(report_path, "\n".join(content))
 
 
 class ComputationalRecorder(logging.Handler):

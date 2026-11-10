@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a1 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a2 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -63,6 +63,7 @@ from input_manifest import load_manifest
 from aware_modes import resolve as resolve_aware_mode
 from library_inputs import execution_samples
 from resource_identity import inventory as dataset_inventory
+from artifact_retention import install as install_output_retention
 from functools import lru_cache
 
 @lru_cache(maxsize=None)
@@ -156,6 +157,7 @@ WORKFLOW_VERSION         = VERSION
 CONFIG_VERSION_LABEL     = str(config.get("workflow_version", VERSION))
 
 DB_ROOT                  = os.path.join(BASE_DIR, config.get("db_root", "db"))
+install_output_retention(workflow, BASE_DIR, owned_roots=(DB_ROOT,))
 KRAKEN_DB_NAME           = str(config.get("kraken_db_name", "standard"))
 KRAKEN_DB_DIR            = os.path.join(DB_ROOT, KRAKEN_DB_NAME)
 BUSCO_DB_DIR             = os.path.join(DB_ROOT, "busco")
@@ -1216,6 +1218,7 @@ CONFIG_FILES = [os.path.abspath(x) for x in list(workflow.configfiles) if os.pat
 SAMPLE_FILES = ([SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) else []) + ([INPUT_MANIFEST["source"]["manifest_path"]] if INPUT_MANIFEST else [])
 SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow", "lib", "workflow_support.py")
 SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE,
+                os.path.join(SOURCE_ROOT, "workflow/lib/artifact_retention.py"),
                 os.path.join(SOURCE_ROOT, "workflow", "lib", "settings.py"), LIBRARY_ADAPTER,
                 os.path.join(SOURCE_ROOT, "workflow", "lib", "input_manifest.py"), LONG_ADAPTER,
                 os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
@@ -1629,7 +1632,7 @@ rule capture_env_assembly_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -1654,7 +1657,7 @@ rule capture_env_library_assembly_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -1679,7 +1682,7 @@ rule capture_env_pacbio_assembly_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -1704,7 +1707,7 @@ rule capture_env_library_preprocess_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -1729,7 +1732,7 @@ rule capture_env_qc_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -1754,7 +1757,7 @@ rule capture_env_polishing_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -1779,7 +1782,7 @@ rule capture_env_medaka_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -1804,7 +1807,7 @@ rule capture_env_annotation_global:
         conda list > "{output[0]}"
         conda env export --no-builds > "{output[1]}"
         conda list --explicit > "{output[2]}"
-        python -m pip freeze > "{output[3]}" || : > "{output[3]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
 
@@ -2098,6 +2101,7 @@ rule clean_pacbio:
     output:
         cleaned=clean_pacbio("{isolate}")
     params:
+        retention_paths=lambda wc: [os.path.join(work_inputs_cleaned_dir(wc.isolate), x) for x in ["pacbio.extracted.fastq", "pacbio.extracted.fastq.gz", ".pacbio.clean.fastq", ".pacbio.clean.fastq.gz"]],
         include_children=KRAKEN_INCLUDE_CHILDREN,
         outdir=lambda wc: work_inputs_cleaned_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
@@ -2130,7 +2134,7 @@ rule clean_pacbio:
           exit 0
         fi
 
-        tmp="{params.outdir}/.pacbio.clean.fastq"
+        tmp="{params.outdir}/pacbio.extracted.fastq"
 
         extra_children=""
         if [ "{KRAKEN_INCLUDE_CHILDREN}" = "True" ]; then
@@ -2141,7 +2145,7 @@ rule clean_pacbio:
           -s "{input.pacbio}" --taxid "$selected_taxid" $extra_children \
           -o "$tmp" --fastq-output
 
-        pigz -p {threads} -n -f "$tmp"
+        pigz -p {threads} -n -c "$tmp" > "$tmp.gz"
         mv "$tmp.gz" "{output.cleaned}"
         gzip -t "{output.cleaned}"
         ) > "{log}" 2>&1
@@ -2169,7 +2173,7 @@ rule flye_pacbio:
         mkdir -p "{params.parent}" "$(dirname "{log}")"
         (
           set -euo pipefail
-          tempdir=$(mktemp -d "{params.parent}/.flye.XXXXXX")
+          tempdir=$(mktemp -d "{params.parent}/flye-attempt-XXXXXX")
           echo "Flye work directory: $tempdir"
           flye {params.chemistry} {input.reads:q} --out-dir "$tempdir" --threads {threads} --iterations 1
           mv "$tempdir" "{output.bundle}"
@@ -2325,10 +2329,10 @@ rule spades_libraries:
         mkdir -p "{params.parent}" "$(dirname "{log}")"
         (
           set -euo pipefail
-          tempdir=$(mktemp -d "{params.parent}/.spades.XXXXXX")
+          tempdir=$(mktemp -d "{params.parent}/spades-attempt-XXXXXX")
           echo "SPAdes work directory: $tempdir"
           python {input.dataset_builder:q} dataset --source "{input.libraries}/dataset.yaml" --output "$tempdir/inputs.yaml" --ont {input.ont:q}
-          spades.py --dataset "$tempdir/inputs.yaml" -o "$tempdir" -t {threads} -m {params.memory_gb} --phred-offset 33
+          spades.py --dataset "$tempdir/inputs.yaml" -o "$tempdir" -t {threads} -m {params.memory_gb} --phred-offset 33 --no-clear-after
           mv "$tempdir" "{output.bundle}"
           python {input.adapter:q} promote "{output.bundle}/contigs.fasta" {output.snapshot:q} {params.minimum}
         ) > {log:q} 2>&1
@@ -2344,6 +2348,7 @@ rule merge_illumina:
         r1=merged_r1("{isolate}"),
         r2=merged_r2("{isolate}")
     params:
+        retention_paths=lambda wc: [os.path.join(work_inputs_merged_dir(wc.isolate), x) for x in ["R1.merged.uncompressed.fastq", "R2.merged.uncompressed.fastq", ".r1.tmp.fq", ".r2.tmp.fq"]],
         r1_list=lambda wc, input: qjoin(input.r1),
         r2_list=lambda wc, input: qjoin(input.r2),
         outdir=lambda wc: work_inputs_merged_dir(wc.isolate),
@@ -2368,14 +2373,14 @@ rule merge_illumina:
           : > "{output.r2}"
           exit 0
         fi
-        tmp1="{params.outdir}/.r1.tmp.fq"
-        tmp2="{params.outdir}/.r2.tmp.fq"
+        tmp1="{params.outdir}/R1.merged.uncompressed.fastq"
+        tmp2="{params.outdir}/R2.merged.uncompressed.fastq"
         > "$tmp1"; > "$tmp2"
         for f in {params.r1_list}; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac >> "$tmp1"; done
         for f in {params.r2_list}; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac >> "$tmp2"; done
         pigz -p {threads} -n -c "$tmp1" > "{output.r1}"
         pigz -p {threads} -n -c "$tmp2" > "{output.r2}"
-        rm -f "$tmp1" "$tmp2"
+
         ) > "{log}" 2>&1
         """
 
@@ -2387,6 +2392,7 @@ rule merge_ont:
     output:
         merged_ont("{isolate}")
     params:
+        retention_paths=lambda wc: [os.path.join(work_inputs_merged_dir(wc.isolate), x) for x in ["ont.merged.uncompressed.fastq", ".ont.tmp.fastq"]],
         ont_list=lambda wc, input: qjoin(input.files),
         outdir=lambda wc: work_inputs_merged_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
@@ -2409,11 +2415,11 @@ rule merge_ont:
           : > "{output}"
           exit 0
         fi
-        tmp="{params.outdir}/.ont.tmp.fastq"
+        tmp="{params.outdir}/ont.merged.uncompressed.fastq"
         > "$tmp"
         for f in {params.ont_list}; do case "$f" in *.gz) zcat "$f" ;; *) cat "$f" ;; esac >> "$tmp"; done
         pigz -p {threads} -n -c "$tmp" > "{output}"
-        rm -f "$tmp"
+
         ) > "{log}" 2>&1
         """
 
@@ -2716,6 +2722,7 @@ rule clean_illumina:
         r1=clean_r1("{isolate}"),
         r2=clean_r2("{isolate}")
     params:
+        retention_paths=lambda wc: [os.path.join(work_inputs_cleaned_dir(wc.isolate), x) for x in ["illumina_R1.extracted.fastq", "illumina_R2.extracted.fastq", "illumina_R1.extracted.fastq.gz", "illumina_R2.extracted.fastq.gz", ".illumina_R1.clean.fq", ".illumina_R2.clean.fq", ".illumina_R1.clean.fq.gz", ".illumina_R2.clean.fq.gz"]],
         include_children=KRAKEN_INCLUDE_CHILDREN,
         outdir=lambda wc: work_inputs_cleaned_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
@@ -2750,8 +2757,8 @@ rule clean_illumina:
           exit 0
         fi
 
-        tmp1="{params.outdir}/.illumina_R1.clean.fq"
-        tmp2="{params.outdir}/.illumina_R2.clean.fq"
+        tmp1="{params.outdir}/illumina_R1.extracted.fastq"
+        tmp2="{params.outdir}/illumina_R2.extracted.fastq"
 
         extra_children=""
         if [ "{KRAKEN_INCLUDE_CHILDREN}" = "True" ]; then
@@ -2763,8 +2770,8 @@ rule clean_illumina:
           --taxid "$selected_taxid" $extra_children \
           -o "$tmp1" -o2 "$tmp2" --fastq-output
 
-        pigz -p {threads} -n -f "$tmp1"
-        pigz -p {threads} -n -f "$tmp2"
+        pigz -p {threads} -n -c "$tmp1" > "$tmp1.gz"
+        pigz -p {threads} -n -c "$tmp2" > "$tmp2.gz"
         mv "$tmp1.gz" "{output.r1}"
         mv "$tmp2.gz" "{output.r2}"
         gzip -t "{output.r1}"
@@ -2782,6 +2789,7 @@ rule clean_ont:
     output:
         cleaned=clean_ont_path("{isolate}")
     params:
+        retention_paths=lambda wc: [os.path.join(work_inputs_cleaned_dir(wc.isolate), x) for x in ["ont.extracted.fastq", "ont.extracted.fastq.gz", ".ont.clean.fastq", ".ont.clean.fastq.gz"]],
         include_children=KRAKEN_INCLUDE_CHILDREN,
         outdir=lambda wc: work_inputs_cleaned_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
@@ -2814,7 +2822,7 @@ rule clean_ont:
           exit 0
         fi
 
-        tmp="{params.outdir}/.ont.clean.fastq"
+        tmp="{params.outdir}/ont.extracted.fastq"
 
         extra_children=""
         if [ "{KRAKEN_INCLUDE_CHILDREN}" = "True" ]; then
@@ -2825,7 +2833,7 @@ rule clean_ont:
           -s "{input.ont}" --taxid "$selected_taxid" $extra_children \
           -o "$tmp" --fastq-output
 
-        pigz -p {threads} -n -f "$tmp"
+        pigz -p {threads} -n -c "$tmp" > "$tmp.gz"
         mv "$tmp.gz" "{output.cleaned}"
         gzip -t "{output.cleaned}"
         ) > "{log}" 2>&1
@@ -2893,6 +2901,7 @@ rule filtlong_ont:
     output:
         filt_ont("{isolate}")
     params:
+        retention_paths=lambda wc: [filt_ont(wc.isolate) + ".tmp.fastq"],
         keep_percent=KEEP_PERCENT,
         outdir=lambda wc: work_inputs_filtered_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate)
@@ -2914,7 +2923,7 @@ rule filtlong_ont:
         if [ -s "{input}" ]; then
           filtlong --min_length 1000 --keep_percent {KEEP_PERCENT} "{input}" > "{output}.tmp.fastq"
           pigz -p {threads} -n -c "{output}.tmp.fastq" > "{output}"
-          rm -f "{output}.tmp.fastq"
+
         else
           : > "{output}"
         fi
@@ -3085,6 +3094,7 @@ rule unicycler:
         asm=unicycler_asm("{isolate}"),
         snapshot=stage_unicycler("{isolate}")
     params:
+        retention_paths=lambda wc: [unicycler_outdir(wc.isolate)],
         spades_memory_gb=SPADES_MEMORY_GB, min_fasta_length=MIN_FASTA_LENGTH,
         outdir=lambda wc: unicycler_outdir(wc.isolate),
         assemblydir=lambda wc: work_assembly_dir(wc.isolate),
@@ -3109,11 +3119,11 @@ rule unicycler:
         mkdir -p "{params.outdir}" "{params.assemblydir}" "{params.logdir}"
         trap 'rc=$?; if [ "$rc" -ne 0 ] && [ -d "{params.outdir}" ]; then find "{params.outdir}" -type f -name "*.log" -exec cp --parents {{}} "{params.logdir}/" \; ; fi; exit "$rc"' EXIT
         if [ "{params.mode}" = "hybrid" ]; then
-          unicycler -l "{input.ont}" -1 "{input.r1}" -2 "{input.r2}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --spades_options "-m {params.spades_memory_gb}"
+          unicycler -l "{input.ont}" -1 "{input.r1}" -2 "{input.r2}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --keep 3 --spades_options "-m {params.spades_memory_gb} --no-clear-after"
         elif [ "{params.mode}" = "ont_only" ]; then
-          unicycler -l "{input.ont}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --spades_options "-m {params.spades_memory_gb}"
+          unicycler -l "{input.ont}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --keep 3 --spades_options "-m {params.spades_memory_gb} --no-clear-after"
         elif [ "{params.mode}" = "illumina_only" ]; then
-          unicycler -1 "{input.r1}" -2 "{input.r2}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --spades_options "-m {params.spades_memory_gb}"
+          unicycler -1 "{input.r1}" -2 "{input.r2}" -o "{params.outdir}" -t {threads} --min_fasta_length {params.min_fasta_length} --keep 3 --spades_options "-m {params.spades_memory_gb} --no-clear-after"
         else
           echo "Unknown run mode"
           exit 1
@@ -3315,6 +3325,7 @@ rule illumina_map:
         bam=coord_bam("{isolate}"), bai=coord_bai("{isolate}"), qn=namesort_bam("{isolate}"),
         count_file=alignment_count("{isolate}")
     params:
+        retention_paths=lambda wc: [os.path.join(work_mapping_dir(wc.isolate), x) for x in ["illumina.paired_qc.sam", ".paired_qc.sam"]],
         outdir=lambda wc: work_mapping_dir(wc.isolate),
         sort_extra=lambda wc, threads: max(0, threads - 1),
         sort_memory=lambda wc, threads: max(64, int(POLISH_MEM_MB * 0.7 / max(1, threads)))
@@ -3328,8 +3339,8 @@ rule illumina_map:
         r"""
         mkdir -p "{params.outdir}" "$(dirname "{log}")" "$(dirname "{output.count_file}")"
         (
-          tmp="{params.outdir}/.paired_qc.sam"
-          trap 'rm -f "$tmp"' EXIT
+          tmp="{params.outdir}/illumina.paired_qc.sam"
+
           bwa mem -t {threads} -a -x intractg "{input.ref}" "{input.r1}" "{input.r2}" > "$tmp"
           samtools sort -@ {params.sort_extra} -m {params.sort_memory}M -O BAM -o "{output.bam}" "$tmp"
           samtools index "{output.bam}"
@@ -3344,6 +3355,7 @@ rule polypolish:
     output:
         fasta=stage_polypolish("{isolate}"), status=polish_status("{isolate}")
     params:
+        retention_paths=lambda wc: [stage_polypolish(wc.isolate) + ".tmp"],
         outdir=lambda wc: work_polypolish_dir(wc.isolate)
     log: os.path.join(logs_dir("{isolate}"), "polypolish.log")
     benchmark: bench("{isolate}", "polypolish")
@@ -3362,7 +3374,7 @@ rule polypolish:
             printf '{{"status":"skipped","reason":"no_mapped_alignments","mapped_alignments":0}}\n' > "{output.status}"
           else
             tmp="{output.fasta}.tmp"
-            trap 'rm -f "$tmp"' EXIT
+
             polypolish polish "{input.ref}" "{input.r1}" "{input.r2}" > "$tmp"
             test -s "$tmp"
             mv "$tmp" "{output.fasta}"
@@ -3431,6 +3443,7 @@ rule final_copy:
     output:
         report(final_asm("{isolate}"), caption="workflow/report/final_assembly.rst", category="Assembly", subcategory="Final")
     params:
+        retention_paths=lambda wc: [final_asm(wc.isolate) + ".tmp"],
         outdir=lambda wc: work_final_dir(wc.isolate)
     log: os.path.join(logs_dir("{isolate}"), "final_copy.log")
     message: "Promote validated final assembly: {wildcards.isolate}"
@@ -3455,6 +3468,7 @@ rule quast:
         txt=report(quast_txt("{isolate}"), caption="workflow/report/quast_txt.rst", category="QC", subcategory="QUAST"),
         tsv=report(quast_tsv("{isolate}"), caption="workflow/report/quast_tsv.rst", category="QC", subcategory="QUAST")
     params:
+        retention_paths=lambda wc: [quast_dir(wc.isolate)],
         outdir=lambda wc: quast_dir(wc.isolate)
     log:
         os.path.join(logs_dir("{isolate}"), "quast.log")
@@ -3471,7 +3485,7 @@ rule quast:
         (
         set -euo pipefail
         mkdir -p "{params.outdir}"
-        quast.py -o "{params.outdir}" -t {threads} "{input}"
+        quast.py --debug -o "{params.outdir}" -t {threads} "{input}"
         ) > "{log}" 2>&1
         """
 
@@ -3486,6 +3500,7 @@ rule busco:
         html=report(busco_html("{isolate}"), caption="workflow/report/busco_html.rst", category="QC", subcategory="BUSCO"),
         identity=os.path.join(busco_dir("{isolate}"), "resource_identity.json")
     params:
+        retention_paths=lambda wc: [busco_dir(wc.isolate)],
         enabled=RUN_BUSCO,
         outdir=lambda wc: busco_dir(wc.isolate),
         rundir=lambda wc: busco_run_dir(wc.isolate),
@@ -3676,6 +3691,7 @@ rule multiqc:
             subcategory="MultiQC",
         )
     params:
+        retention_paths=lambda wc: [multiqc_dir(wc.isolate)],
         enabled=RUN_MULTIQC,
         outdir=lambda wc: multiqc_dir(wc.isolate),
         isodir=lambda wc: iso_dir(wc.isolate)
@@ -3713,6 +3729,7 @@ rule prokka:
         gff=report(prokka_gff("{isolate}"), caption="workflow/report/prokka_gff.rst", category="Annotation", subcategory="Prokka"),
         faa=report(prokka_faa("{isolate}"), caption="workflow/report/prokka_faa.rst", category="Annotation", subcategory="Prokka")
     params:
+        retention_paths=lambda wc: [annotation_dir(wc.isolate)],
         enabled=RUN_PROKKA,
         outdir=lambda wc: annotation_dir(wc.isolate)
     log:
@@ -3737,7 +3754,7 @@ rule prokka:
           : > "{output.faa}"
           exit 0
         fi
-        prokka "{input}" --outdir "{params.outdir}" --prefix "{wildcards.isolate}" --cpus {threads} --force
+        prokka "{input}" --outdir "{params.outdir}" --prefix "{wildcards.isolate}" --cpus {threads} --debug --force
         ) > "{log}" 2>&1
         """
 

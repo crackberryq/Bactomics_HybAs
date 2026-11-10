@@ -7,3 +7,7 @@ rerun-incomplete: true
 printshellcmds: false
 show-failed-logs: true
 benchmark-extended: true
+
+# Failed and temporary products are retained, also with other profiles.
+keep-incomplete: true
+notemp: true

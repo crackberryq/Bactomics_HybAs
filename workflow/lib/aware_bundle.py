@@ -93,6 +93,8 @@ def safe_file(root, relative):
 
 def verify_bundle(path, full=True):
     path = Path(path)
+    if (path.parent / 'failure.json').exists():
+        raise ValueError('AWARE bundle belongs to an unpublished failed attempt')
     doc = read_json(path)
     if doc.get('schema') != SCHEMA:
         raise ValueError('Unsupported AWARE bundle')
@@ -129,7 +131,7 @@ def verify_continuation(path, checksum, context, isolate):
 
 
 def build(review, output, cleaned, decision, plan=None, preserve_groups=False, statistics=False, selector=None):
-    from aware_preservation import Writers, fastq, read_key, preserve
+    from aware_preservation import Writers, fastq, read_key, preserve, record_failed_attempt
     from aware_output_report import decisions, render
     receipt = read_json(review)
     for expected in receipt['files']:
@@ -139,7 +141,7 @@ def build(review, output, cleaned, decision, plan=None, preserve_groups=False, s
     if output.exists():
         raise ValueError('AWARE output already exists; retain it or create a new run')
     output.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix='.aware-', dir=output.parent))
+    staging = Path(tempfile.mkdtemp(prefix=output.name + '.attempt-', dir=output.parent))
     try:
         mapper = LibraryWriter(staging, plan)
         writers = Writers(staging)
@@ -185,7 +187,7 @@ def build(review, output, cleaned, decision, plan=None, preserve_groups=False, s
         stats = None
         if statistics:
             from aware_statistics import analyse
-            stats = analyse(receipt, selector, plan)
+            stats = analyse(receipt, selector, plan, report_dir=staging / 'bootstrap_reports')
             (staging/'statistics.json').write_text(json.dumps(stats, indent=2)+'\n')
         shutil.copyfile(decision, staging/'filtering.tsv')
         files = [dict(path=str(p.relative_to(staging)), size=p.stat().st_size, sha256=digest(p))
@@ -206,6 +208,7 @@ def build(review, output, cleaned, decision, plan=None, preserve_groups=False, s
                 raise ValueError('Identification evidence changed during AWARE completion')
         staging.rename(output)
         return doc
-    finally:
+    except BaseException as exc:
         if staging.exists():
-            shutil.rmtree(staging)
+            record_failed_attempt(staging, output, exc)
+        raise

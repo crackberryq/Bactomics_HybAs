@@ -184,8 +184,12 @@ def trim(plan, r1, r2, outdir, combined1, combined2, report_html, report_json, t
     outdir.mkdir(parents=True, exist_ok=True)
     counts = [0] * len(plan["libraries"])
     reports, dataset, polishing_inputs = [], [], []
-    # Clean inputs are scratch files, not permanent second copies of all reads.
-    with tempfile.TemporaryDirectory(prefix=".library-clean-", dir=outdir) as temporary:
+    # These are the exact per-library inputs to preprocessing. Keep them, including
+    # partial files on failure, independently of the combined cleaned FASTQs.
+    clean_root = outdir / "cleaned_inputs"
+    clean_root.mkdir(exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix="attempt-", dir=clean_root))
+    try:
         paths = [(Path(temporary) / f"{li}_R1.fq.gz", Path(temporary) / f"{li}_R2.fq.gz")
                  for li in range(len(counts))]
         with ExitStack() as stack:
@@ -214,10 +218,20 @@ def trim(plan, r1, r2, outdir, combined1, combined2, report_html, report_json, t
             reports.append({"library_id": name, "library_type": lib["library_type"],
                             "orientation": lib["orientation"], "declared_insert_size_bp": lib.get("insert_size_bp"),
                             "cleaned_pairs": counts[li], "trimmed_pairs": remaining,
+                            "cleaned_r1": str(paths[li][0]), "cleaned_r2": str(paths[li][1]),
                             "preprocessing": lib.get('preprocessing', 'fastp'),
                             "polishing_eligible": bool(eligible), "fastp": details, "html_path": str(html_path)})
             dataset.append(entries)
             polishing_inputs.extend(eligible)
+    except BaseException as exc:
+        # Failure is not a successful preprocessing result, but its inputs remain
+        # available for diagnosis. Never delete them during exception unwinding.
+        try:
+            write_json(temporary / "failure.json", {"status": "failed", "published": False,
+                       "error_type": type(exc).__name__, "error": str(exc)})
+        except OSError:
+            pass  # Preserve the original failure, including a full disk.
+        raise
     # SPAdes estimates insert distributions. Declared sizes order the libraries,
     # but are not passed as an invented/unsupported dataset attribute.
     order = sorted(range(len(dataset)), key=lambda i: (plan["libraries"][i].get("insert_size_bp", 0), i))
