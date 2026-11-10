@@ -240,3 +240,35 @@ def test_real_engine_external_marker_requires_explicit_registered_root(tmp_path)
     assert marker.read_text() == 'new'
     assert (base / 'tool.log').read_text() == 'new-log'
     assert len(list((databases / 'retained').iterdir())) == 1
+
+@pytest.mark.parametrize('runtime', ['9.6.2', '9.27.1'])
+@pytest.mark.parametrize('metadata', ['matching', '0.0.0', None])
+def test_runtime_version_supports_conda_metadata(runtime, metadata, monkeypatch):
+    import snakemake
+    import artifact_retention as retention
+    monkeypatch.setattr(snakemake, '__version__', runtime)
+    def distribution(name):
+        assert name == 'snakemake'
+        if metadata is None:
+            raise retention.importlib.metadata.PackageNotFoundError(name)
+        return runtime if metadata == 'matching' else metadata
+    monkeypatch.setattr(retention.importlib.metadata, 'version', distribution)
+    assert retention.runtime_version() == runtime
+
+@pytest.mark.parametrize('runtime', [None, '0.0.0', '9.99.0'])
+def test_unknown_runtime_cannot_borrow_supported_distribution(runtime, monkeypatch):
+    import snakemake
+    import artifact_retention as retention
+    monkeypatch.setattr(snakemake, '__version__', runtime)
+    monkeypatch.setattr(retention.importlib.metadata, 'version', lambda name: '9.6.2')
+    with pytest.raises(RuntimeError, match='runtime'):
+        retention.runtime_version()
+
+@pytest.mark.parametrize('metadata', ['9.27.1', 'unknown', '9.6.2+different'])
+def test_concrete_or_unknown_distribution_conflict_is_refused(metadata, monkeypatch):
+    import snakemake
+    import artifact_retention as retention
+    monkeypatch.setattr(snakemake, '__version__', '9.6.2')
+    monkeypatch.setattr(retention.importlib.metadata, 'version', lambda name: metadata)
+    with pytest.raises(RuntimeError, match='Conflicting'):
+        retention.runtime_version()

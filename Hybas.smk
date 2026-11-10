@@ -3812,7 +3812,7 @@ rule tool_versions:
             return "NA"
 
         versions = {
-            "snakemake": __import__("importlib.metadata", fromlist=["version"]).version("snakemake"),
+            "snakemake": __import__("snakemake").__version__,
 
             "unicycler": parse_conda_list_version(input.assembly_list, "unicycler"),
             "spades": parse_conda_list_version(input.library_list if base_stage(iso) == "spades" else input.assembly_list, "spades"),

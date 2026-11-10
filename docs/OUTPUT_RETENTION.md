@@ -36,3 +36,7 @@ Hard termination, disk failure or explicit user deletion cannot be prevented by 
 The Dev branch preserves each replaced computational HTML report under `provenance/runtime/report_history/`, including completion-callback refreshes outside scheduled jobs. It additionally retains per-library cleaned inputs in `trimmed/libraries/cleaned_inputs/attempt-*`, failed AWARE staging as `reports/aware.attempt-*` with `failure.json`, and generated bootstrap selector reports under the AWARE bundle's `bootstrap_reports/`. A failed AWARE bundle is rejected for continuation. Failed Flye/SPAdes working directories have visible unique attempt names under `work/assembly/`.
 
 Tests use synthetic products and tool-contract stubs to verify retention, failure/retry behavior and unchanged workflow routing. They do not establish scientific accuracy.
+
+## Conda controller identity
+
+The executing `snakemake.__version__` identifies the supported engine, matching the CLI. Conda's known `0.0.0` distribution-metadata placeholder (or absent distribution metadata) cannot replace that identity. An unsupported runtime or a concrete conflicting distribution version stops execution. New run version records also use the executing module version. Release publishing requires the native Conda controller retention tests and a synthetic end-to-end version-record check, in addition to the existing regression and browser checks.
