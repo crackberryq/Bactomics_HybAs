@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a2 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a3 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -1219,6 +1219,9 @@ SAMPLE_FILES = ([SAMPLE_SHEET] if SAMPLE_SHEET and os.path.isfile(SAMPLE_SHEET) 
 SUPPORT_FILE = os.path.join(SOURCE_ROOT, "workflow", "lib", "workflow_support.py")
 SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE,
                 os.path.join(SOURCE_ROOT, "workflow/lib/artifact_retention.py"),
+                os.path.join(SOURCE_ROOT, "workflow/lib/native_output_retention.py"),
+                os.path.join(SOURCE_ROOT, "workflow/lib/busco_retention.py"),
+                os.path.join(SOURCE_ROOT, "workflow/lib/flye_retention.py"),
                 os.path.join(SOURCE_ROOT, "workflow", "lib", "settings.py"), LIBRARY_ADAPTER,
                 os.path.join(SOURCE_ROOT, "workflow", "lib", "input_manifest.py"), LONG_ADAPTER,
                 os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
@@ -2156,7 +2159,9 @@ rule flye_pacbio:
         isolate=PACBIO_PATTERN
     input:
         authorization=assembly_authorization,
-        reads=clean_pacbio("{isolate}"), metrics=pacbio_metrics("{isolate}"), adapter=LIBRARY_ADAPTER
+        reads=clean_pacbio("{isolate}"), metrics=pacbio_metrics("{isolate}"), adapter=LIBRARY_ADAPTER,
+        native_keeper=os.path.join(SOURCE_ROOT, "workflow/lib/flye_retention.py"),
+        retention_core=os.path.join(SOURCE_ROOT, "workflow/lib/native_output_retention.py")
     output:
         bundle=directory(flye_outdir("{isolate}")), snapshot=stage_flye("{isolate}")
     params:
@@ -2175,7 +2180,7 @@ rule flye_pacbio:
           set -euo pipefail
           tempdir=$(mktemp -d "{params.parent}/flye-attempt-XXXXXX")
           echo "Flye work directory: $tempdir"
-          flye {params.chemistry} {input.reads:q} --out-dir "$tempdir" --threads {threads} --iterations 1
+          python {input.native_keeper:q} --root "$tempdir" -- {params.chemistry} {input.reads:q} --out-dir "$tempdir" --threads {threads} --iterations 1
           mv "$tempdir" "{output.bundle}"
           python {input.adapter:q} promote "{output.bundle}/assembly.fasta" {output.snapshot:q} {params.minimum}
         ) > {log:q} 2>&1
@@ -3493,6 +3498,8 @@ rule busco:
     input:
         asm=final_asm("{isolate}"),
         resource_code=os.path.join(SOURCE_ROOT, "workflow/lib/resource_identity.py"),
+        native_keeper=os.path.join(SOURCE_ROOT, "workflow/lib/busco_retention.py"),
+        retention_core=os.path.join(SOURCE_ROOT, "workflow/lib/native_output_retention.py"),
         support=SUPPORT_FILE,
         dataset=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]), item["path"]) for item in busco_content_identity(ISO_OVERRIDES[wc.isolate]["busco_lineage"])["files"]] if RUN_BUSCO else []
     output:
@@ -3533,7 +3540,7 @@ rule busco:
           exit 0
         fi
         python {input.resource_code:q} --path {params.lineage_path:q} --expected {params.content_sha:q}
-        busco -i "{input.asm}" \
+        python {input.native_keeper:q} --output-root {params.outdir:q} -- -i "{input.asm}" \
           -o "busco_{wildcards.isolate}" \
           --out_path "{params.outdir}" \
           -m genome \

@@ -1,0 +1,9 @@
+# HybAs 10.0.0a3
+
+This update preserves BUSCO's reviewed Python-managed cleanup products and records separate stdout/stderr for each native job, including failures. It also preserves Flye consensus/polishing intermediates, unfiltered contigs and earlier log/parameter revisions before their reviewed Python removal or replacement.
+
+Archives are stored in `native-retained/` inside each native output root, alongside source receipts and event manifests. The original tool arguments and cleanup behavior are retained. Package version/source mismatches and preservation failures stop execution. No assembly, filtering, polishing or quality threshold changes are introduced.
+
+Use a new run with the updated source. Historical frozen runs are unchanged, and previously deleted files cannot be recovered. Allow additional disk space and transfer the entire run directory or a complete isolate export before intentional cleanup.
+
+Publication requires regression checks and retention contracts against the pinned native package sources. These are software checks; independent accuracy validation remains separate. Capture excludes cleanup performed inside compiled executables (such as sort spill chunks), unwritten streams, kernel scratch and in-memory states. See [retention locations and limits](OUTPUT_RETENTION.md).

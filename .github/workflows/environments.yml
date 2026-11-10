@@ -1,9 +1,9 @@
 name: Native environment checks
 on:
   push:
-    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml', 'tests/native_library_smoke.py', 'tests/native_platform_smoke.py']
+    paths: ['workflow/envs/**', 'workflow/lib/native_output_retention.py', 'workflow/lib/flye_retention.py', 'workflow/lib/busco_retention.py', 'environment.yaml', '.github/workflows/environments.yml', 'tests/native_library_smoke.py', 'tests/native_platform_smoke.py']
   pull_request:
-    paths: ['workflow/envs/**', 'environment.yaml', '.github/workflows/environments.yml', 'tests/native_library_smoke.py', 'tests/native_platform_smoke.py']
+    paths: ['workflow/envs/**', 'workflow/lib/native_output_retention.py', 'workflow/lib/flye_retention.py', 'workflow/lib/busco_retention.py', 'environment.yaml', '.github/workflows/environments.yml', 'tests/native_library_smoke.py', 'tests/native_platform_smoke.py']
   workflow_dispatch:
 permissions:
   contents: read

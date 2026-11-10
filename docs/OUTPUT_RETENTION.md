@@ -27,7 +27,7 @@ Retention increases disk use, particularly for uncompressed reads, alignments an
 
 ## Limits
 
-This is not a guarantee that every transient created internally by every third-party executable survives. In particular, Dev's Flye 2.9.6 deletes some internal consensus/polishing alignments, temporary bubbles/consensus files and unfiltered contigs without a supported keep flag; its remaining native output directory is retained. A BUSCO keep-all internal-scratch guarantee has not been established. Streaming bytes that were never written to a file and kernel/runtime scratch are not captured. Reconstructible SQLite indexes and lock files used by HybAs bookkeeping can still be removed; the original reads, assignment ledgers and report evidence remain.
+Capture covers the reviewed Python-managed cleanup and overwrite paths in the pinned native packages described below. It does not intercept every filesystem operation inside compiled executables. For example, Flye's bundled SAMtools removes internal sort spill chunks; those files are outside this adapter. Unwritten streams, kernel/runtime scratch and in-memory states are not captured. Reconstructible SQLite indexes and lock files used by HybAs bookkeeping can still be removed; the original reads, assignment ledgers and report evidence remain.
 
 Hard termination, disk failure or explicit user deletion cannot be prevented by this adapter. Existing files already deleted by older releases cannot be recovered. Manual Snakemake cleanup/delete commands are explicit destructive operations, not ordinary execution, and are outside the rerun adapter.
 
@@ -40,3 +40,18 @@ Tests use synthetic products and tool-contract stubs to verify retention, failur
 ## Conda controller identity
 
 The executing `snakemake.__version__` identifies the supported engine, matching the CLI. Conda's known `0.0.0` distribution-metadata placeholder (or absent distribution metadata) cannot replace that identity. An unsupported runtime or a concrete conflicting distribution version stops execution. New run version records also use the executing module version. Release publishing requires the native Conda controller retention tests and a synthetic end-to-end version-record check, in addition to the existing regression and browser checks.
+
+
+## Native cleanup archives
+
+New runs use a source-checked retention launcher for BUSCO 6.0.0; Dev also uses one for Flye 2.9.6. The launchers preserve generated files immediately before the reviewed native Python code removes or truncates them, then permit the original cleanup operation. This preserves the tools' normal control flow and arguments. Installed tool packages are not modified. An unsupported package version or changed reviewed source stops the launch instead of silently proceeding without retention.
+
+Each native output root contains a visible `native-retained/` directory with separate sessions and generations. Keep this directory with the entire native output bundle. Session receipts identify the tool and reviewed source; event manifests retain the original relative path and archived location. These paths are included when the surrounding output directory is retained on a later workflow retry. Failed and partial artifacts remain evidence of an attempt, not a completed result.
+
+BUSCO archives its reviewed Python-managed scratch removals and replaced directories. It retains the previous baseline of each shared native-job log before its first overwrite, then saves a separate stdout/stderr record for every native job, including captured output from failed jobs. These separate records preserve diagnostics that parallel jobs can overwrite in the original shared log files. The source-checked adapter is propagated to BUSCO's spawned workers through a private package copy stored with the session.
+
+Dev's Flye archives the consensus alignment, polishing-iteration alignments, bubbles and consensus files, graph-edge alignment and unfiltered polished contigs removed by its reviewed Python cleanup. Earlier `minimap.stderr` and `params.json` revisions are retained before replacement. Existing alignment sidecars remain in the original native bundle. Retention does not add polishing rounds or per-stage quality calculations.
+
+The native adapters refuse destructive operations outside their owned output root, symlinked output paths and hardlinked files. Archives contain independent previous bytes; no hardlinks are used. A persistent failure record makes retention failure fatal even if upstream code catches a cleanup exception. Disk-full or interrupted archives must be inspected rather than treated as a successful completed retention session.
+
+Required release checks run against the pinned native package source, exercising cleanup and overwrite behavior with synthetic products and stubbed expensive computations. These checks test storage and control-flow contracts, not scientific accuracy. Existing runs frozen to an older source keep that source; use a new run with the updated pipeline for this retention behavior. Files already deleted by older runs cannot be recovered.
