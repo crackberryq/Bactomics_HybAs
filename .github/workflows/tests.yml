@@ -68,8 +68,56 @@ jobs:
       - name: Verify recorded Snakemake version with synthetic tool stubs
         run: python -m pytest tests/test_workflow.py -k 'test_end_to_end_routes and illumina_only and none' -q
 
+  native-output-retention:
+    name: Native output retention (${{ matrix.tool }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tool: busco
+            version: '6.0.0'
+          - tool: flye
+            version: '2.9.6'
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          activate-environment: native-retention
+          python-version: '3.11'
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          conda-remove-defaults: true
+      - name: Install the unchanged pinned native package
+        run: conda install --yes --strict-channel-priority '${{ matrix.tool }}=${{ matrix.version }}'
+      - run: python -m pip install 'pytest>=8,<10'
+      - name: Verify actual package sources and retention behavior
+        env:
+          HYBAS_RETENTION_TOOL: ${{ matrix.tool }}
+        run: |
+          if [ "$HYBAS_RETENTION_TOOL" = busco ]; then
+            export HYBAS_BUSCO_SOURCE=$(python -c 'import busco; from pathlib import Path; print(Path(busco.__file__).resolve().parent.parent)')
+          else
+            export HYBAS_FLYE_SOURCE=$(python -c 'import flye; from pathlib import Path; print(Path(flye.__file__).resolve().parent.parent)')
+          fi
+          python -m pytest tests/test_native_output_retention.py tests/test_${HYBAS_RETENTION_TOOL}_retention.py -q --basetemp=tests/.native-retention
+      - name: Exercise the Flye launcher with actual native executables
+        if: matrix.tool == 'flye'
+        run: python tests/native_platform_smoke.py flye
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: native-retention-evidence-${{ matrix.tool }}
+          include-hidden-files: true
+          path: tests/.native-retention/**
+
   publish-report-release:
-    needs: [regression, report-browser, native-controller]
+    needs: [regression, report-browser, native-controller, native-output-retention]
     if: github.ref == 'refs/heads/development' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -80,10 +128,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v10.0.0a2"
+          tag="v10.0.0a3"
           if gh release view "$tag" >/dev/null 2>&1; then
             git fetch origin "refs/tags/$tag:refs/tags/$tag"
             test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 10.0.0a2" --prerelease --notes-file docs/RELEASE_10.0.0a2.md
+            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 10.0.0a3" --prerelease --notes-file docs/RELEASE_10.0.0a3.md
           fi

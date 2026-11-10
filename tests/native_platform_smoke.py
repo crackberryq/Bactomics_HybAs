@@ -31,7 +31,9 @@ def main():
             write_reads(path, [(f'read{i}', seq[(start := rng.randrange(180000)):start+20000]) for i in range(500)])
             for flag in ('--pacbio-hifi', '--pacbio-raw'):
                 output = root / flag[2:]
-                subprocess.run(['flye', flag, str(path), '--out-dir', str(output), '--threads', '2', '--iterations', '1'], check=True)
+                output.mkdir()
+                launcher = Path(__file__).resolve().parents[1] / 'workflow/lib/flye_retention.py'
+                subprocess.run([sys.executable, str(launcher), '--root', str(output), '--', flag, str(path), '--out-dir', str(output), '--threads', '2', '--iterations', '1'], check=True)
                 promote(output / 'assembly.fasta', root / (flag[2:] + '.fasta'), 1000)
         else:
             paths = [root / 'R1.fq.gz', root / 'R2.fq.gz']
