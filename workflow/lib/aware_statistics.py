@@ -61,7 +61,7 @@ def write_report(path, nodes, counts):
     path.write_text('\n'.join(rows)+'\n' if n else '')
 
 
-def analyse(receipt, selector, plan=None, replicates=200, seed=1729):
+def analyse(receipt, selector, plan=None, replicates=200, seed=1729, report_dir=None):
     paths = {Path(r['path']).name: Path(r['path']) for r in receipt['files']}
     platforms = [p for p in ('illumina','ont','pacbio') if receipt['platforms'].get(p)]
     prefixes = {p: 'nanopore' if p == 'ont' else p for p in platforms}
@@ -100,14 +100,20 @@ def analyse(receipt, selector, plan=None, replicates=200, seed=1729):
         interpretation='95% Wilson intervals describe observed assignment support under independent-unit sampling assumptions. Bootstrap selection frequency measures sensitivity to resampling these same assignments. Neither is a probability that the organism identification is correct. Database bias, duplicated molecules and other dependencies are not resolved; libraries and platforms are not pooled into a confidence score.')
     if selector and target:
         rng = random.Random(seed); votes = Counter()
-        with tempfile.TemporaryDirectory(prefix='aware-statistics-') as directory:
-            reports = {p: Path(directory)/(p+'.report.txt') for p in ('illumina','ont','pacbio')}
+        # Retain each generated selector input, rather than overwriting three
+        # temporary reports at every replicate and deleting them at the end.
+        root = Path(report_dir) if report_dir is not None else next(iter(paths.values())).parent / 'aware-statistics'
+        root.mkdir(parents=True, exist_ok=True)
+        attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=root))
+        for replicate in range(replicates):
+            directory = attempt / f'replicate-{replicate + 1:06d}'
+            directory.mkdir()
+            reports = {p: directory/(p+'.report.txt') for p in ('illumina','ont','pacbio')}
             for path in reports.values(): path.write_text('')
-            for _ in range(replicates):
-                aggregate = {p:Counter() for p in platforms}
-                for key, counts in sorted(strata.items()): aggregate[key[0]].update(resample(rng,counts))
-                for p in platforms: write_report(reports[p], nodes, aggregate[p])
-                votes[selector(reports)['selected_taxid']] += 1
+            aggregate = {p:Counter() for p in platforms}
+            for key, counts in sorted(strata.items()): aggregate[key[0]].update(resample(rng,counts))
+            for p in platforms: write_report(reports[p], nodes, aggregate[p])
+            votes[selector(reports)['selected_taxid']] += 1
         result['stability'] = dict(method='stratified multinomial bootstrap of original Kraken assignment units',
             replicates=replicates, seed=seed, selections=dict(votes), same_target_fraction=votes[target]/replicates,
             policy='existing automatic target-election function, unchanged')

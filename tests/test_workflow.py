@@ -92,6 +92,7 @@ def test_end_to_end_routes(tmp_path,mode,polish,pp,expected,stages):
     text=(tmp_path/'sample/work/final/assembly.final.fasta').read_text().strip()
     assert text.endswith(expected)
     summary=json.loads((tmp_path/'sample/metadata/run_summary.json').read_text())
+    assert summary["tool_snakemake_version"] == __import__("snakemake").__version__
     computational=computational_runs(tmp_path)
     assert len(computational)==1
     assert computational[0]['status']=='success'

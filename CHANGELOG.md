@@ -1,3 +1,11 @@
+## 10.0.0a2 — Conda controller correction
+
+Use the executing Snakemake module version for retention compatibility and run version records. Accept known Conda distribution placeholders only with a supported runtime; reject contradictory versions. Native Conda controller checks now gate release publication. No analysis parameters change.
+
+## 10.0.0a2 — output retention
+
+Retain prior job products, native tool sidecars, logs and benchmarks before Snakemake removes outputs for reruns or retries. Failed and temporary products are retained. Enable supported native keep options and retain generated SAM/FASTQ streams. No polishing, filtering or assembly-selection parameters change. See [output retention](docs/OUTPUT_RETENTION.md) for paths, storage implications and upstream limits.
+
 ## HybAs AWARE 10.0.0a1 — integration update (unreleased)
 
 - Integrate regular AWARE 9.0.2 identification review and the branded report into the v10 development branch.
