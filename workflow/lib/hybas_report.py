@@ -10,7 +10,7 @@ from pathlib import Path
 from hybas_report_assets import CSS
 
 SCHEMA = 'hybas-report-1'
-RENDERER_VERSION = 'HybAs-9.0.3-AWARE'
+RENDERER_VERSION = 'HybAs-9.0.4-AWARE'
 
 
 def e(value):

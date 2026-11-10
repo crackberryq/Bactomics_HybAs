@@ -1,3 +1,7 @@
+## 9.0.4-AWARE — output retention
+
+Retain prior job products, native tool sidecars, logs and benchmarks before Snakemake removes outputs for reruns or retries. Failed and temporary products are retained. Enable supported native keep options and retain generated SAM/FASTQ streams. No polishing, filtering or assembly-selection parameters change. See [output retention](docs/OUTPUT_RETENTION.md) for paths, storage implications and upstream limits.
+
 ## HybAs AWARE 9.0.3 — Alpha, 2026-11-09
 
 - Fresh retained Medaka attempts prevent reuse of stale native intermediates.
