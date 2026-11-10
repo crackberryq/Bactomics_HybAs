@@ -94,10 +94,12 @@ def test_end_to_end_routes(tmp_path,mode,polish,pp,expected,stages):
     assert text.endswith(expected)
     summary=json.loads((tmp_path/'sample/metadata/run_summary.json').read_text())
     assert summary["tool_snakemake_version"] == __import__("snakemake").__version__
-    source_records = (tmp_path/'provenance/runtime/global_input_hashes.tsv').read_text()
+    source_records = {Path(path).resolve(): digest for label, path, digest in
+                      (line.split('\t') for line in (tmp_path/'provenance/runtime/global_input_hashes.tsv').read_text().splitlines()[1:])
+                      if label == 'workflow_source'}
     for helper in ['native_output_retention.py', 'busco_retention.py', 'flye_retention.py']:
         source = ROOT/'workflow/lib'/helper
-        assert f"{source}\t{hashlib.sha256(source.read_bytes()).hexdigest()}\n" in source_records
+        assert source_records[source.resolve()] == hashlib.sha256(source.read_bytes()).hexdigest()
     computational=computational_runs(tmp_path)
     assert len(computational)==1
     assert computational[0]['status']=='success'
