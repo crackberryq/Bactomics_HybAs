@@ -9,7 +9,7 @@ import re
 import shutil
 from pathlib import Path
 
-VERSION = "HybAs-9.0.3-AWARE"
+VERSION = "HybAs-9.0.4-AWARE"
 
 
 def normalize_taxid(value):
