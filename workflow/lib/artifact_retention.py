@@ -21,6 +21,26 @@ import uuid
 SUPPORTED_SNAKEMAKE = {"9.6.2", "9.27.1"}
 
 
+def runtime_version():
+    """Verify the executing engine, accommodating Conda's metadata placeholder.
+
+    snakemake-minimal can expose distribution version 0.0.0 while its runtime
+    correctly reports the pinned engine version. A concrete conflicting version
+    still signals a mixed installation and must not enable the adapter.
+    """
+    import snakemake
+    version = getattr(snakemake, "__version__", None)
+    if not isinstance(version, str) or version not in SUPPORTED_SNAKEMAKE:
+        raise RuntimeError(f"Output retention has not been verified for Snakemake runtime {version!r}; use one of {sorted(SUPPORTED_SNAKEMAKE)}")
+    try:
+        distribution_version = importlib.metadata.version("snakemake")
+    except importlib.metadata.PackageNotFoundError:
+        distribution_version = None
+    if distribution_version not in (None, "0.0.0", version):
+        raise RuntimeError(f"Conflicting Snakemake identities: runtime {version}, distribution metadata {distribution_version!r}; repair the controller before running")
+    return version
+
+
 def _write_manifest(path, value):
     temporary = path.with_suffix(".pending")
     with temporary.open("w", encoding="utf-8") as handle:
@@ -170,9 +190,7 @@ def install(workflow, base_dir, owned_roots=()):
     database root. Their archives stay in that root's ``retained/`` directory.
     """
     from snakemake.jobs import Job
-    version = importlib.metadata.version("snakemake")
-    if version not in SUPPORTED_SNAKEMAKE:
-        raise RuntimeError(f"Output retention has not been verified for Snakemake {version}; use one of {sorted(SUPPORTED_SNAKEMAKE)}")
+    runtime_version()
     original = Job.remove_existing_output
     if not inspect.iscoroutinefunction(original) or list(inspect.signature(original).parameters) != ["self"]:
         raise RuntimeError("Snakemake output preparation changed; refusing to run without output retention")

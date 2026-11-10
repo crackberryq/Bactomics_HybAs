@@ -19,7 +19,7 @@ allow_ont_only: true
 allow_illumina_only: true
 require_target_taxid_for_kraken: false
 polish_mode: tripolish
-workflow_version: HybAs-9.0.4-AWARE
+workflow_version: HybAs-9.0.5-AWARE
 db_root: db
 kraken_db_name: kraken2_std_db
 kraken_decision_mode: aware
