@@ -1,0 +1,11 @@
+{
+  "interface": 1,
+  "status": "experimental",
+  "stage": "read_preservation",
+  "schema": "hybas-aware-plus-preservation-v1",
+  "entry_point": "workflow/scripts/aware_plus_preserve.py",
+  "requires_long_reads": true,
+  "supported_long_read_platforms": ["ont"],
+  "strain_linkage_available": false,
+  "reconstruction_available": false
+}
