@@ -209,7 +209,12 @@ def generate(isolate, output_dir, with_audit):
     strategy_html = "<details><summary>Input libraries and assembly choice</summary><pre>" + esc(json.dumps(strategy, indent=2)) + "</pre></details>"
     model_html = "<h3>Medaka model provenance</h3>" + key_values(summary, [
         "medaka_model_requested", "medaka_model_effective", "medaka_model_sha256",
-        "medaka_model_selection", "medaka_input_metadata_status"])
+        "medaka_model_selection", "medaka_model_selection_policy", "medaka_model_selection_reason",
+        "medaka_model_fallback_default", "medaka_model_fallback_medaka_version",
+        "medaka_model_fallback_source_commit", "medaka_input_metadata_status"])
+    if summary.get('medaka_model_selection') == 'fallback':
+        model_html += ("<p class='warn'>Documented default fallback was used; this was not a match to the read metadata "
+                       "and does not establish scientific suitability.</p>")
     model_html += ("<p class='note'>An explicitly selected model with missing or mixed read metadata requires researcher review. "
                    "Successful execution does not establish improved accuracy. Missing legacy model provenance is not inferred.</p>")
     compute_html = "<p><a href='../../../provenance/runtime/computational_report.html'>Computational resources and invocation history</a></p><p class='note'>Final resource totals are recorded when the workflow finishes. Missing measurements are not estimated.</p>"

@@ -1,15 +1,45 @@
 {
   "contract": "hybas-medaka-model-review",
-  "version": 1,
+  "version": 2,
   "configuration_fields": [
     "medaka_model",
     "medaka_model_review_acknowledged",
     "medaka_model_review_reason",
-    "medaka_model_reviewed_model"
+    "medaka_model_reviewed_model",
+    "medaka_model_selection_policy"
   ],
   "helper": "workflow/lib/medaka_stage.py",
   "preflight_rule": "medaka_model_preflight",
   "inspection": "all_raw_ont_reads_before_analysis_and_all_filtered_reads_at_medaka_execution",
-  "automatic_fallback": false,
-  "scientific_suitability": "not_assessed"
+  "automatic_fallback": {
+    "policy": "documented_default",
+    "medaka_version": "2.2.0",
+    "model": "r1041_e82_400bps_sup_v5.2.0",
+    "upstream_source_commit": "019a2ab597218a1c239fb7a5315f271a4577ed6b",
+    "options_sha256": "16af07e1530bd30950cd22954e084b4d8f92316d0bc41ecd5669e768eb707f8e"
+  },
+  "scientific_suitability": "not_assessed",
+  "selection_policies": [
+    "strict",
+    "documented_default"
+  ],
+  "missing_policy": "strict",
+  "new_draft_policy": "documented_default",
+  "selection_precedence": [
+    "explicit",
+    "exact_installed_mapping",
+    "documented_default"
+  ],
+  "fallback_eligible": [
+    "basecaller_metadata_absent",
+    "basecaller_model_unsupported"
+  ],
+  "fallback_excluded": [
+    "mixed_metadata",
+    "incomplete_metadata",
+    "installed_mapping_unavailable",
+    "resolution_failure",
+    "runtime_failure",
+    "invalid_reads"
+  ]
 }

@@ -77,3 +77,20 @@ def test_unmatched_model_review_is_visible_and_escaped():
     assert '&lt;script&gt;research comparison&lt;/script&gt;' in text
     assert '<script>research comparison</script>' not in text
     assert 'does not validate model suitability' in text
+
+
+def test_fallback_is_visible_in_report_and_methods_without_claiming_a_match():
+    from hybas_report import methods_text
+    summary = dict(isolate='sample', workflow_version='development', executed_stages=['medaka'],
+        medaka_model_requested='', medaka_model_selection='fallback',
+        medaka_model_selection_policy='documented_default',
+        medaka_model_selection_reason='basecaller_metadata_absent',
+        medaka_model_fallback_default='r1041_e82_400bps_sup_v5.2.0',
+        medaka_model_fallback_medaka_version='2.2.0',
+        medaka_model_fallback_source_commit='019a2ab597218a1c239fb7a5315f271a4577ed6b',
+        medaka_model_effective='resolved.tar.gz', medaka_model_sha256='a' * 64)
+    for text in (render_report(summary), methods_text({'summary': summary})):
+        assert 'basecaller_metadata_absent' in text
+        assert 'r1041_e82_400bps_sup_v5.2.0' in text
+        assert 'not a match to the read metadata' in text
+        assert 'does not establish scientific suitability' in text
