@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [assembly, library_assembly, library_preprocess, pacbio_assembly, polishing, medaka, qc, annotation]
+        environment: [assembly, library_assembly, library_preprocess, pacbio_assembly, polishing, medaka, qc, multiqc, annotation]
     defaults:
       run:
         shell: bash -el {0}
@@ -29,6 +29,8 @@ jobs:
           channel-priority: strict
           conda-remove-defaults: true
       - run: bash workflow/envs/${{ matrix.environment }}.post-deploy.sh
+        env:
+          HYBAS_PREPARE_BROWSER: ${{ matrix.environment == 'qc' && '1' || '0' }}
       - if: matrix.environment == 'library_assembly'
         run: python tests/native_library_smoke.py
       - if: matrix.environment == 'library_preprocess'

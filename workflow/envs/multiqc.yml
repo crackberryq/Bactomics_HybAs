@@ -1,0 +1,10 @@
+name: hybas-multiqc
+channels:
+- conda-forge
+- bioconda
+dependencies:
+- python=3.11
+- multiqc=1.32
+# MultiQC 1.32 requires Kaleido 0.2.1. It cannot share NanoPlot's renderer.
+- plotly=6.0.1
+- python-kaleido=0.2.1

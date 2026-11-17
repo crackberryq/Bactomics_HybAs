@@ -181,8 +181,13 @@ def render_report(data):
     if 'medaka' in (s.get('executed_stages') or []):
         assembly+=panel('Medaka model provenance',pairs([('Requested model',s.get('medaka_model_requested',s.get('medaka_model'))),
             ('Effective model',s.get('medaka_model_effective')),('Model SHA256',s.get('medaka_model_sha256')),
-            ('Selection',s.get('medaka_model_selection')),('Read model metadata',s.get('medaka_input_metadata_status'))])+
+            ('Selection',s.get('medaka_model_selection')),('Read model metadata',s.get('medaka_input_metadata_status')),
+            ('Installed-mapping assessment',s.get('medaka_model_review_status')),
+            ('Explicit review acknowledged',s.get('medaka_model_review_acknowledged')),
+            ('Model bound to review',s.get('medaka_model_reviewed_model')),
+            ('Recorded review reason',s.get('medaka_model_review_reason'))])+
             '<p class="small muted">An explicitly selected model with missing or mixed read metadata needs researcher review. '
+            'A mapping match or recorded acknowledgement does not validate model suitability. '
             'Successful execution is not evidence of improved accuracy.</p>')
     annotation=b.get('annotation',{})
     annotation_html=panel('Recorded annotation', '<p>'+e(annotation.get('status','Not recorded'))+'</p>'+table([dict(feature=k,count=v) for k,v in annotation.get('counts',{}).items()],['feature','count'])+'<p>Use the final assembly, matching GFF and protein FASTA for downstream BaSIS and GeneScope runs.</p>')

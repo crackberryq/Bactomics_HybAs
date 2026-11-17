@@ -1,0 +1,15 @@
+{
+  "contract": "hybas-medaka-model-review",
+  "version": 1,
+  "configuration_fields": [
+    "medaka_model",
+    "medaka_model_review_acknowledged",
+    "medaka_model_review_reason",
+    "medaka_model_reviewed_model"
+  ],
+  "helper": "workflow/lib/medaka_stage.py",
+  "preflight_rule": "medaka_model_preflight",
+  "inspection": "all_raw_ont_reads_before_analysis_and_all_filtered_reads_at_medaka_execution",
+  "automatic_fallback": false,
+  "scientific_suitability": "not_assessed"
+}

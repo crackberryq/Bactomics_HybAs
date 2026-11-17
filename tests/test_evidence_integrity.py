@@ -49,9 +49,9 @@ def test_medaka_scheduled_runs_never_reuse_cache_and_record_effective_model(tmp_
     out.parent.mkdir(); (out.parent/'calls_to_draft.bam').write_text('stale bam')
     (out.parent/'consensus_probs.hdf').write_text('stale hdf')
     stub = NativeStub(model)
-    first = execute(reads,draft,out,receipt,2,runner=stub,known_models=())
+    first = execute(reads,draft,out,receipt,2,runner=stub,known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     fq(reads,['modelB']); draft.write_text('>draft\nAAAA\n'); model.write_text('model-v2')
-    second = execute(reads,draft,out,receipt,2,requested='reviewed-model',runner=stub,known_models=())
+    second = execute(reads,draft,out,receipt,2,requested='reviewed-model',reviewed_model='reviewed-model',review_acknowledged=True,review_reason='synthetic fixture only',runner=stub,known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     assert first['attempt'] != second['attempt']
     assert Path(first['attempt'],'native/consensus.fasta').exists()
     assert first['inputs_sha256'] != second['inputs_sha256']
@@ -62,7 +62,7 @@ def test_medaka_scheduled_runs_never_reuse_cache_and_record_effective_model(tmp_
     assert all('-m' in args for args in stub.calls if args[0]=='medaka_consensus')
     prior = out.read_bytes(); stub.fail=True
     with pytest.raises(subprocess.CalledProcessError):
-        execute(reads,draft,out,receipt,2,requested='reviewed-model',runner=stub,known_models=())
+        execute(reads,draft,out,receipt,2,requested='reviewed-model',reviewed_model='reviewed-model',review_acknowledged=True,review_reason='synthetic fixture only',runner=stub,known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     assert out.read_bytes()==prior and json.loads(receipt.read_text())==second
     assert any(json.loads(p.read_text())['status']=='failed' for p in out.parent.glob('attempts/*/execution.json'))
 
@@ -72,7 +72,7 @@ def test_auto_selection_rejects_missing_or_mixed_metadata_without_fallback(tmp_p
     reads,draft = tmp_path/'reads.fq',tmp_path/'draft.fa'; fq(reads,models);draft.write_text('>d\nACGT\n')
     stub=NativeStub(tmp_path/'model')
     with pytest.raises(ValueError,match='requires one model identity'):
-        execute(reads,draft,tmp_path/'out/consensus.fa',tmp_path/'out/execution.json',2,runner=stub,known_models=())
+        execute(reads,draft,tmp_path/'out/consensus.fa',tmp_path/'out/execution.json',2,runner=stub,known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     assert not stub.calls
 
 
@@ -138,11 +138,11 @@ def test_each_scheduled_medaka_trigger_has_fresh_native_attempt(tmp_path,changed
     reads,draft,model = [tmp_path/n for n in ('reads.fq','draft.fa','model.tar.gz')]
     fq(reads,['modelA']);draft.write_text('>draft\nAAAA\n');model.write_text('modelA')
     output,receipt=tmp_path/'out/consensus.fa',tmp_path/'out/execution.json';stub=NativeStub(model)
-    before=execute(reads,draft,output,receipt,1,requested='modelA',runner=stub,known_models=())
+    before=execute(reads,draft,output,receipt,1,requested='modelA',reviewed_model='modelA',review_acknowledged=True,review_reason='synthetic fixture only',runner=stub,known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     if changed=='reads':fq(reads,['modelB'])
     elif changed=='draft':draft.write_text('>draft\nCCCC\n')
     elif changed=='model':model.write_text('modelB')
-    after=execute(reads,draft,output,receipt,1,requested='modelA',runner=stub,known_models=())
+    after=execute(reads,draft,output,receipt,1,requested='modelA',reviewed_model='modelA',review_acknowledged=True,review_reason='synthetic fixture only',runner=stub,known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     assert before['attempt']!=after['attempt']
     assert sum(x[0]=='medaka_consensus' for x in stub.calls)==2
     if changed in {'reads','draft'}:assert before['inputs_sha256'][changed]!=after['inputs_sha256'][changed]
@@ -164,5 +164,5 @@ def test_resolver_failure_never_runs_consensus_with_native_default(tmp_path):
         calls.append(args)
         raise subprocess.CalledProcessError(1,args)
     with pytest.raises(subprocess.CalledProcessError):
-        execute(reads,draft,tmp_path/'out/consensus.fa',tmp_path/'out/execution.json',1,runner=fail,known_models=())
+        execute(reads,draft,tmp_path/'out/consensus.fa',tmp_path/'out/execution.json',1,runner=fail,known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     assert len(calls)==1 and calls[0][:3]==['medaka','tools','resolve_model']

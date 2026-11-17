@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a4 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a5 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -121,6 +121,9 @@ KEEP_PERCENT             = int(config.get("keep_percent", 95))
 RACON_ROUNDS             = int(config.get("racon_rounds", 2))
 DEFAULT_BUSCO_LINEAGE    = str(config.get("busco_lineage", "bacteria_odb10"))
 DEFAULT_MEDAKA_MODEL     = str(config.get("medaka_model", ""))
+MEDAKA_REVIEW_ACKNOWLEDGED = config.get("medaka_model_review_acknowledged", False)
+MEDAKA_REVIEW_REASON = config.get("medaka_model_review_reason", "")
+MEDAKA_REVIEWED_MODEL = config.get("medaka_model_reviewed_model", "")
 DEFAULT_TARGET_TAXID     = manual_taxid(config.get("target_taxid"))
 
 RUN_KRAKEN               = as_bool(config.get("run_kraken", True))
@@ -550,6 +553,9 @@ def env_pip_freeze_global(envname):
 
 def env_python_version_global(envname):
     return os.path.join(provenance_conda_dir(), f"{envname}.python_version.txt")
+
+def env_graphics_runtime_global(envname):
+    return os.path.join(provenance_conda_dir(), f"{envname}.graphics_runtime.json")
 
 def sha256_file(path):
     h = hashlib.sha256()
@@ -1162,6 +1168,13 @@ def planned_stages(i):
 def needs_polypolish(i):
     return "polypolish" in planned_stages(i)
 
+def medaka_preflight_receipt(i):
+    return os.path.join(work_medaka_dir(i), "model_preflight.json")
+
+def medaka_preflight_inputs(wc):
+    # Identification-only endpoints remain available before a polishing decision.
+    return [medaka_preflight_receipt(wc.isolate)] if not ASSEMBLY_PENDING and "medaka" in planned_stages(wc.isolate) else []
+
 def stage_path(i, stage):
     if stage == "unicycler": return stage_unicycler(i)
     if stage == "spades": return stage_spades(i)
@@ -1188,12 +1201,15 @@ def enabled_envs():
     if (SETUP_ONLY and POLISH_MODE == "tripolish" and RUN_POLYPOLISH) or any(needs_polypolish(i) for i in SAMPLES): names.append("polishing")
     if (SETUP_ONLY and POLISH_MODE in {"medaka", "tripolish"}) or any("medaka" in planned_stages(i) for i in SAMPLES): names.append("medaka")
     if RUN_PROKKA: names.append("annotation")
+    if RUN_MULTIQC: names.append("multiqc")
     return names
 
 def environment_outputs():
-    return [fn(name) for name in enabled_envs() for fn in
-            (env_conda_list_global, env_export_global, env_explicit_global,
-             env_pip_freeze_global, env_python_version_global)]
+    names = enabled_envs()
+    manifests = [fn(name) for name in names for fn in
+                 (env_conda_list_global, env_export_global, env_explicit_global,
+                  env_pip_freeze_global, env_python_version_global)]
+    return manifests + [env_graphics_runtime_global(name) for name in names if name in {"qc", "multiqc"}]
 
 def active_env_list(name):
     return env_conda_list_global(name) if name in enabled_envs() else []
@@ -1225,7 +1241,8 @@ SOURCE_FILES = [os.path.join(SOURCE_ROOT, "Hybas.smk"), SUPPORT_FILE,
                 os.path.join(SOURCE_ROOT, "workflow", "lib", "settings.py"), LIBRARY_ADAPTER,
                 os.path.join(SOURCE_ROOT, "workflow", "lib", "input_manifest.py"), LONG_ADAPTER,
                 os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
-                os.path.join(SOURCE_ROOT, "workflow/lib/resource_identity.py")]
+                os.path.join(SOURCE_ROOT, "workflow/lib/resource_identity.py"),
+                os.path.join(SOURCE_ROOT, "workflow/lib/rendering_runtime.py")]
 EFFECTIVE_CONFIG = json.dumps(config, sort_keys=True, default=str)
 AWARE_SETTINGS = {k: v for k, v in globals().copy().items() if k.startswith("KRAKEN_") and isinstance(v, (str, bool, int, float))}
 # Explicitly fingerprint only controller source so report-only edits do not rerun classification.
@@ -1715,12 +1732,15 @@ rule capture_env_library_preprocess_global:
         """
 
 rule capture_env_qc_global:
+    input:
+        runtime_capture=os.path.join(SOURCE_ROOT, "workflow/lib/rendering_runtime.py")
     output:
         env_conda_list_global("qc"),
         env_export_global("qc"),
         env_explicit_global("qc"),
         env_pip_freeze_global("qc"),
-        env_python_version_global("qc")
+        env_python_version_global("qc"),
+        env_graphics_runtime_global("qc")
     params:
         outdir=provenance_conda_dir()
     conda: "workflow/envs/qc.yml"
@@ -1737,6 +1757,36 @@ rule capture_env_qc_global:
         conda list --explicit > "{output[2]}"
         python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
+        python "{input.runtime_capture}" --tool nanoplot --output "{output[5]}"
+        """
+
+rule capture_env_multiqc_global:
+    input:
+        runtime_capture=os.path.join(SOURCE_ROOT, "workflow/lib/rendering_runtime.py")
+    output:
+        env_conda_list_global("multiqc"),
+        env_export_global("multiqc"),
+        env_explicit_global("multiqc"),
+        env_pip_freeze_global("multiqc"),
+        env_python_version_global("multiqc"),
+        env_graphics_runtime_global("multiqc")
+    params:
+        outdir=provenance_conda_dir()
+    conda: "workflow/envs/multiqc.yml"
+    message:
+        "Capturing MultiQC environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_multiqc_global.tsv")
+    shell:
+        r"""
+        set -euo pipefail
+        mkdir -p "{params.outdir}"
+        conda list > "{output[0]}"
+        conda env export --no-builds > "{output[1]}"
+        conda list --explicit > "{output[2]}"
+        python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
+        python -V > "{output[4]}" 2>&1
+        python "{input.runtime_capture}" --tool multiqc --output "{output[5]}"
         """
 
 rule capture_env_polishing_global:
@@ -2243,6 +2293,7 @@ rule merge_ont_manifest:
         isolate=ONT_MANIFEST_PATTERN
     input:
         reads=lambda wc: manifest_long_files(wc.isolate, "ont"),
+        medaka_review=medaka_preflight_inputs,
         adapter=LONG_ADAPTER, support=LIBRARY_ADAPTER
     output:
         reads=merged_ont("{isolate}"),
@@ -2264,6 +2315,7 @@ rule merge_illumina_libraries:
     input:
         r1=lambda wc: illumina_r1_files(wc.isolate),
         r2=lambda wc: illumina_r2_files(wc.isolate),
+        medaka_review=medaka_preflight_inputs,
         adapter=LIBRARY_ADAPTER
     output:
         r1=merged_r1("{isolate}"), r2=merged_r2("{isolate}"),
@@ -2348,7 +2400,8 @@ rule merge_illumina:
         isolate=LEGACY_PATTERN
     input:
         r1=lambda wc: paired_illumina_files(wc.isolate)[0],
-        r2=lambda wc: paired_illumina_files(wc.isolate)[1]
+        r2=lambda wc: paired_illumina_files(wc.isolate)[1],
+        medaka_review=medaka_preflight_inputs
     output:
         r1=merged_r1("{isolate}"),
         r2=merged_r2("{isolate}")
@@ -2393,7 +2446,8 @@ rule merge_ont:
     wildcard_constraints:
         isolate=id_pattern([i for i in SAMPLES if i not in ONT_MANIFEST_SAMPLES])
     input:
-        files=lambda wc: nanopore_files(wc.isolate)
+        files=lambda wc: nanopore_files(wc.isolate),
+        medaka_review=medaka_preflight_inputs
     output:
         merged_ont("{isolate}")
     params:
@@ -3229,6 +3283,34 @@ rule racon_consensus:
         ) > "{log}" 2>&1
         """
 
+rule medaka_model_preflight:
+    input:
+        reads=lambda wc: nanopore_files(wc.isolate),
+        adapter=os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
+        library=LIBRARY_ADAPTER, support=SUPPORT_FILE,
+        configured_model=lambda wc: [ISO_OVERRIDES[wc.isolate]["medaka_model"]] if os.path.isfile(ISO_OVERRIDES[wc.isolate]["medaka_model"]) else []
+    output:
+        receipt=medaka_preflight_receipt("{isolate}")
+    params:
+        model_arg=lambda wc: shlex.quote(ISO_OVERRIDES[wc.isolate]["medaka_model"]),
+        review_ack="--review-acknowledged" if MEDAKA_REVIEW_ACKNOWLEDGED else "",
+        review_reason_arg=shlex.quote(MEDAKA_REVIEW_REASON),
+        reviewed_model_arg=shlex.quote(MEDAKA_REVIEWED_MODEL),
+        configured_model_sha=lambda wc: sha256_file(ISO_OVERRIDES[wc.isolate]["medaka_model"]) if os.path.isfile(ISO_OVERRIDES[wc.isolate]["medaka_model"]) else "resolved_at_execution"
+    log:
+        os.path.join(logs_dir("{isolate}"), "medaka_model_preflight.log")
+    conda:
+        "workflow/envs/medaka.yml"
+    threads: 1
+    resources: mem_mb=POLISH_MEM_MB
+    message: "Review Medaka model against every raw ONT read before analysis: {wildcards.isolate}"
+    shell:
+        r"""
+        mkdir -p "$(dirname "{log}")"
+        python {input.adapter:q} --preflight --reads {input.reads:q} --receipt {output.receipt:q} \
+          --requested {params.model_arg} {params.review_ack} --review-reason {params.review_reason_arg} --reviewed-model {params.reviewed_model_arg} > {log:q} 2>&1
+        """
+
 rule medaka:
     input:
         prev=lambda wc: stage_racon(wc.isolate, RACON_ROUNDS) if RACON_ROUNDS > 0 else stage_path(wc.isolate, base_stage(wc.isolate)),
@@ -3236,6 +3318,7 @@ rule medaka:
         adapter=os.path.join(SOURCE_ROOT, "workflow/lib/medaka_stage.py"),
         library=os.path.join(SOURCE_ROOT, "workflow/lib/library_inputs.py"),
         support=SUPPORT_FILE,
+        model_preflight=medaka_preflight_receipt("{isolate}"),
         configured_model=lambda wc: [ISO_OVERRIDES[wc.isolate]["medaka_model"]] if os.path.isfile(ISO_OVERRIDES[wc.isolate]["medaka_model"]) else []
     output:
         consensus=stage_medaka("{isolate}"),
@@ -3247,6 +3330,9 @@ rule medaka:
         mode=lambda wc: RUN_MODE[wc.isolate],
         model=lambda wc: ISO_OVERRIDES[wc.isolate]["medaka_model"],
         model_arg=lambda wc: shlex.quote(ISO_OVERRIDES[wc.isolate]["medaka_model"]),
+        review_ack="--review-acknowledged" if MEDAKA_REVIEW_ACKNOWLEDGED else "",
+        review_reason_arg=shlex.quote(MEDAKA_REVIEW_REASON),
+        reviewed_model_arg=shlex.quote(MEDAKA_REVIEWED_MODEL),
         configured_model_sha=lambda wc: sha256_file(ISO_OVERRIDES[wc.isolate]["medaka_model"]) if os.path.isfile(ISO_OVERRIDES[wc.isolate]["medaka_model"]) else "resolved_at_execution"
     log:
         os.path.join(logs_dir("{isolate}"), "medaka.log")
@@ -3267,7 +3353,8 @@ rule medaka:
         mkdir -p "{params.outdir}" "{params.logdir}"
         python {input.adapter:q} --reads {input.ont:q} --draft {input.prev:q} \
           --output {output.consensus:q} --receipt {output.receipt:q} \
-          --threads {threads} --requested {params.model_arg}
+          --threads {threads} --requested {params.model_arg} {params.review_ack} \
+          --review-reason {params.review_reason_arg} --reviewed-model {params.reviewed_model_arg} --preflight-receipt {input.model_preflight:q}
         ) > "{log}" 2>&1
         """
 
@@ -3707,7 +3794,7 @@ rule multiqc:
     benchmark:
         bench("{isolate}", "multiqc")
     conda:
-        "workflow/envs/qc.yml"
+        "workflow/envs/multiqc.yml" if RUN_MULTIQC else "workflow/envs/controller.yml"
     threads: 1
     message:
         logmsg(22, "MultiQC")
@@ -3776,6 +3863,7 @@ rule tool_versions:
         pacbio_list=lambda wc: active_env_list("pacbio_assembly") if wc.isolate in PACBIO_SAMPLES else [],
         preprocess_list=lambda wc: active_env_list("library_preprocess") if wc.isolate in LIBRARY_SAMPLES else [],
         qc_list=lambda wc: active_env_list("qc"),
+        multiqc_list=lambda wc: active_env_list("multiqc"),
         polishing_list=lambda wc: active_env_list("polishing"),
         medaka_list=lambda wc: active_env_list("medaka"),
         annotation_list=lambda wc: active_env_list("annotation")
@@ -3840,7 +3928,7 @@ rule tool_versions:
             "krakentools": parse_conda_list_version(input.qc_list, ["krakentools", "krakentools.py", "krakentools-py"]),
             "busco": parse_conda_list_version(input.qc_list, "busco"),
             "quast": parse_conda_list_version(input.qc_list, "quast"),
-            "multiqc": parse_conda_list_version(input.qc_list, "multiqc"),
+            "multiqc": parse_conda_list_version(input.multiqc_list, "multiqc"),
             "nanoplot": parse_conda_list_version(input.qc_list, ["nanoplot", "NanoPlot"]),
             "seqkit": parse_conda_list_version(input.qc_list, "seqkit"),
 
@@ -4146,6 +4234,10 @@ rule run_summary:
             "medaka_model_effective": execution.get("medaka", {}).get("model", {}).get("effective_model"),
             "medaka_model_sha256": execution.get("medaka", {}).get("model", {}).get("sha256"),
             "medaka_model_selection": execution.get("medaka", {}).get("model", {}).get("selection", "not_requested"),
+            "medaka_model_review_status": execution.get("medaka", {}).get("model_review", {}).get("status"),
+            "medaka_model_review_reason": execution.get("medaka", {}).get("model_review", {}).get("review_reason"),
+            "medaka_model_review_acknowledged": execution.get("medaka", {}).get("model_review", {}).get("review_acknowledged"),
+            "medaka_model_reviewed_model": execution.get("medaka", {}).get("model_review", {}).get("reviewed_model"),
             "medaka_input_metadata_status": execution.get("medaka", {}).get("model", {}).get("input_metadata", {}).get("status", "not_assessed"),
 
             "input_illumina_r1_files": len(illumina_r1_files(iso)),
