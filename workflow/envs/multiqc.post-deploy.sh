@@ -2,6 +2,9 @@
 set -euo pipefail
 location=$(command -v multiqc) || { echo "Missing executable: multiqc" >&2; exit 1; }
 case "$location" in "$CONDA_PREFIX"/*) ;; *) echo "Executable outside managed environment: multiqc" >&2; exit 1;; esac
+# Rendering alone cannot detect missing declared dependencies (for example
+# optional report features). Enforce the canonical Python package contract too.
+python -m pip check
 python - <<'PY'
 from importlib import metadata
 import json
@@ -10,7 +13,8 @@ import struct
 import subprocess
 from tempfile import TemporaryDirectory
 
-expected = {'multiqc': '1.32', 'plotly': '6.0.1', 'kaleido': '0.2.1'}
+expected = {'multiqc': '1.32', 'plotly': '6.0.1', 'kaleido': '0.2.1',
+            'polars-lts-cpu': '1.33.1'}
 actual = {name: metadata.version(name) for name in expected}
 if actual != expected:
     raise RuntimeError('MultiQC rendering contract differs: ' + json.dumps(actual))

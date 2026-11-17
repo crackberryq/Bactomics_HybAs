@@ -18,8 +18,12 @@ def test_rendering_recipes_do_not_mix_incompatible_kaleido_contracts():
     report = yaml.safe_load((ROOT / 'workflow/envs/multiqc.yml').read_text())['dependencies']
     assert 'nanoplot=1.46.2' in qc and 'python-kaleido=1.0.0' in qc and 'plotly=6.1.2' in qc
     assert not any(item.startswith('multiqc') for item in qc)
-    assert 'multiqc=1.32' in report and 'python-kaleido=0.2.1' in report and 'plotly=6.0.1' in report
-    assert not any(item.startswith('nanoplot') for item in report)
+    # Conda owns only the interpreter/installer. A deprecated Conda Polars
+    # alias must not be mixed into the canonical pip-owned reporting stack.
+    assert [item for item in report if isinstance(item, str)] == ['python=3.11', 'pip']
+    pip_packages = next(item['pip'] for item in report if isinstance(item, dict))
+    assert set(pip_packages) == {'multiqc==1.32', 'polars-lts-cpu==1.33.1',
+                                 'plotly==6.0.1', 'kaleido==0.2.1'}
 
 
 @pytest.mark.parametrize('enabled', [True, False])
@@ -30,7 +34,7 @@ def test_tool_versions_attribute_multiqc_to_its_own_manifest(tmp_path, enabled):
     # reporter environment, nor imply execution when the report was disabled.
     qc, report, output = [tmp_path / name for name in ('qc.txt', 'multiqc.txt', 'versions.tsv')]
     qc.write_text('nanoplot 1.46.2 fixture\nmultiqc 0.0 stale-fixture\n')
-    report.write_text('multiqc 1.32 fixture\n')
+    report.write_text('multiqc 1.32 pypi_0 pypi\n')
     inputs = {name: [] for name in ('assembly_list', 'library_list', 'pacbio_list',
                                     'preprocess_list', 'polishing_list', 'medaka_list', 'annotation_list')}
     inputs.update(qc_list=str(qc), multiqc_list=str(report) if enabled else [])

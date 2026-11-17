@@ -7,6 +7,16 @@ MultiQC recipe uses Plotly 6.0.1 and Kaleido 0.2.1. Plotly 7 removed the
 `create_2d_density` API used by NanoPlot 1.46.2. These are software dependency
 constraints, not evidence of analytical validity.
 
+The MultiQC environment uses Conda for Python 3.11 and pip, then installs the
+complete reporting stack from its canonical Python distributions. This avoids
+the MultiQC 1.32 Conda recipe's missing declared dependencies and deprecated
+`polars-lts-cpu` alias. The actual `polars-lts-cpu` distribution owns the Polars
+module; a second Conda or pip `polars` package must not be added. MultiQC's
+dependencies include `boto3` and `pyarrow`, even when the rendering fixture does
+not exercise their features. Installation checks retain strict `pip check`
+before the real HTML/PNG check. Conda manifests and `pip freeze` record the
+resolved environment; these recipes are not complete transitive dependency locks.
+
 Kaleido 1 needs a working Chrome or Chromium installation. A supported
 Bactologix **Install** or **Repair** action can prepare a missing browser through
 the installed Kaleido package. The post-deployment hook permits that download

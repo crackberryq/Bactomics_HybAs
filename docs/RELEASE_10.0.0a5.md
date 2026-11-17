@@ -22,12 +22,20 @@ identity against preflight. Previous native attempt outputs remain available.
 Medaka stays pinned at 2.2.0; this change does not approve an historical model
 preset or validate inference accuracy.
 
+The Medaka environment installs its canonical ONT Python dependencies and
+pins pysam within Medaka's declared range. PyTorch 2.9.1 and NumPy 2.3.5 stay
+Conda-owned; the Python installer is constrained against replacing them.
+Setup checks package consistency, namespace ownership, imported native files
+and small synthetic library operations. These checks do not load a consensus
+model or validate GPU execution. Installed builds and versions remain recorded
+for comparison with earlier runs.
+
 NanoPlot 1.46.2 and MultiQC 1.32 now use separate environments because their
 Kaleido requirements conflict. The QC environment pins Plotly 6.1.2 and
 Kaleido 1.0.0; MultiQC uses Plotly 6.0.1 and Kaleido 0.2.1. The MultiQC
 environment is selected only when reporting is enabled, and version records
-read its own captured manifest. Analysis thresholds and tool outputs remain
-unchanged by this dependency split.
+read its own captured manifest. Analysis thresholds are unchanged, and native
+outputs remain retained.
 
 Post-deployment checks run the actual NanoPlot and MultiQC command-line tools
 on synthetic inputs and require both HTML and complete PNG output. NanoPlot
@@ -65,12 +73,9 @@ checks. Medaka environment checks download no model weights and run no
 inference. The release notes append the tested source commit and CI run URL at
 publication. Published tags retain their original source identities.
 
-Local MultiQC HTML/PNG execution passed in an isolated Python environment.
-Local NanoPlot static rendering could not be qualified because the execution
-environment denied Chromium startup. The clean Conda rendering jobs are
-therefore required gates, not evidence claimed from local tests. Synthetic
-workflow tests exercise scheduling, output retention and provenance with
-tool stubs; they do not run a complete biological analysis.
+Synthetic workflow tests exercise scheduling, output retention and provenance
+with tool stubs; they do not run a complete biological analysis. Rendering
+checks exercise the actual CLI tools on synthetic plotting fixtures.
 
 A passing setup probe establishes rendering capability at check time. It
 does not establish that a later sample produced every plot: NanoPlot can

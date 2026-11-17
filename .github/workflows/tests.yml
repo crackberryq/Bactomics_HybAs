@@ -158,6 +158,7 @@ jobs:
           mkdir -p render-evidence
           conda list --explicit > render-evidence/conda-explicit.txt
           conda list --json > render-evidence/conda-list.json
+          python -m pip freeze --all > render-evidence/pip-freeze.txt
           python -m pip check
           bash workflow/envs/${{ matrix.environment }}.post-deploy.sh 2>&1 | tee render-evidence/render-check.log
       - uses: actions/upload-artifact@v4
