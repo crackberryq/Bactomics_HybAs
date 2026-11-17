@@ -14,6 +14,12 @@ keep_percent: 95
 racon_rounds: 2
 busco_lineage: bacteria_odb10
 medaka_model: ''
+# Explicit choices without an installed basecaller mapping require documented review.
+# This acknowledgement does not establish scientific suitability or change read metadata.
+medaka_model_review_acknowledged: false
+medaka_model_review_reason: ''
+# Must equal the exact medaka_model ID/path when acknowledging an unmatched choice.
+medaka_model_reviewed_model: ''
 target_taxid: ''
 run_kraken: auto
 run_busco: auto
@@ -27,7 +33,7 @@ allow_ont_only: true
 allow_illumina_only: true
 require_target_taxid_for_kraken: false
 polish_mode: auto
-workflow_version: HybAs-AWARE-10.0.0a4
+workflow_version: HybAs-AWARE-10.0.0a5
 db_root: db
 kraken_db_name: kraken2_std_db
 kraken_decision_mode: aware

@@ -116,8 +116,108 @@ jobs:
           include-hidden-files: true
           path: tests/.native-retention/**
 
+  native-rendering:
+    name: Native rendering (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # Browser libraries are present, but Playwright's browser binaries are kept
+    # outside Kaleido's normal discovery paths. Assert this before testing setup.
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.64.1-noble
+      options: --ipc=host --init
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [qc, multiqc]
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          activate-environment: render-check
+          environment-file: workflow/envs/${{ matrix.environment }}.yml
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          conda-remove-defaults: true
+      - name: Require a fresh browser setup path
+        if: matrix.environment == 'qc'
+        run: |
+          python - <<'PY'
+          from choreographer.browsers.chromium import Chromium
+          browser = Chromium.find_browser(skip_local=False)
+          assert browser is None, f"Fresh browser setup test requires no discoverable Chrome: {browser}"
+          PY
+      - name: Check real CLI HTML and PNG output in the complete recipe
+        env:
+          HYBAS_PREPARE_BROWSER: ${{ matrix.environment == 'qc' && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          mkdir -p render-evidence
+          conda list --explicit > render-evidence/conda-explicit.txt
+          conda list --json > render-evidence/conda-list.json
+          python -m pip freeze --all > render-evidence/pip-freeze.txt
+          python -m pip check
+          bash workflow/envs/${{ matrix.environment }}.post-deploy.sh 2>&1 | tee render-evidence/render-check.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-rendering-${{ matrix.environment }}
+          path: render-evidence/
+          if-no-files-found: warn
+
+  native-medaka:
+    name: Native Medaka environment and model interface
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          activate-environment: medaka-check
+          environment-file: workflow/envs/medaka.yml
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          conda-remove-defaults: true
+      - name: Check the installed Medaka CLI and mapping without inference
+        run: |
+          set -euo pipefail
+          mkdir -p medaka-evidence
+          conda list --explicit > medaka-evidence/conda-explicit.txt
+          conda list --json > medaka-evidence/conda-list.json
+          python -m pip check
+          bash workflow/envs/medaka.post-deploy.sh 2>&1 | tee medaka-evidence/postdeploy.log
+          medaka tools resolve_model --help > medaka-evidence/resolve-model-help.txt
+          python - <<'PY'
+          import importlib.metadata
+          import json
+          from pathlib import Path
+          from medaka.options import basecaller_models
+          version = importlib.metadata.version('medaka')
+          assert version == '2.2.0', version
+          mapping = dict(basecaller_models)
+          assert mapping, 'Installed Medaka basecaller mapping is empty'
+          Path('medaka-evidence/model-interface.json').write_text(json.dumps({
+              'medaka_version': version,
+              'basecaller_models': mapping,
+              'scope': 'Installed model-selection interface only; no weights downloaded or inference run.',
+          }, indent=2, sort_keys=True) + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-medaka-environment
+          path: medaka-evidence/
+          if-no-files-found: warn
+
   publish-report-release:
-    needs: [regression, report-browser, native-controller, native-output-retention]
+    needs: [regression, report-browser, native-controller, native-output-retention, native-rendering, native-medaka]
     if: github.ref == 'refs/heads/development' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -128,10 +228,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v10.0.0a4"
+          tag="v10.0.0a5"
           if gh release view "$tag" >/dev/null 2>&1; then
             git fetch origin "refs/tags/$tag:refs/tags/$tag"
             test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 10.0.0a4" --prerelease --notes-file docs/RELEASE_10.0.0a4.md
+            notes="$RUNNER_TEMP/hybas-release-notes.md"
+            cat docs/RELEASE_10.0.0a5.md > "$notes"
+            printf '\nTested source: `%s`. Required CI checks: %s/%s/actions/runs/%s.\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$notes"
+            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 10.0.0a5 — Alpha" --prerelease --notes-file "$notes"
           fi

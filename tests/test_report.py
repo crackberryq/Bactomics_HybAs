@@ -66,3 +66,14 @@ def test_processing_checks_are_not_analytical_suitability():
     assert 'Not assessed against validated use-specific acceptance criteria' in text
     assert 'legacy overall_qc_status is also a bookkeeping check' in text
     assert 'Medaka model provenance' in text and 'effective.tar.gz' in text and 'mixed' in text
+
+
+def test_unmatched_model_review_is_visible_and_escaped():
+    text = render_report(dict(isolate='sample', workflow_version='10.0.0a5', executed_stages=['medaka'],
+        medaka_model_effective='explicit-model', medaka_model_review_status='unsupported_basecaller',
+        medaka_model_review_acknowledged=True, medaka_model_reviewed_model='explicit-model',
+        medaka_model_review_reason='<script>research comparison</script>'))
+    assert 'unsupported_basecaller' in text and 'Model bound to review' in text
+    assert '&lt;script&gt;research comparison&lt;/script&gt;' in text
+    assert '<script>research comparison</script>' not in text
+    assert 'does not validate model suitability' in text

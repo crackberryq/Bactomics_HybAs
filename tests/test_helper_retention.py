@@ -37,12 +37,12 @@ def test_medaka_failed_publication_scratch_survives_later_attempt(tmp_path, monk
     with monkeypatch.context() as patch:
         patch.setattr(medaka_stage.os, 'replace', fail_publication)
         with pytest.raises(OSError, match='synthetic publication failure'):
-            medaka_stage.execute(reads, draft, output, receipt, 1, runner=runner, known_models=())
+            medaka_stage.execute(reads, draft, output, receipt, 1, runner=runner, known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     failed = next((tmp_path / 'attempts').iterdir())
     saved = (failed / 'consensus.publish.tmp').read_bytes()
     assert saved == (failed / 'native/consensus.fasta').read_bytes()
     assert json.loads((failed / 'execution.json').read_text())['status'] == 'failed'
-    result = medaka_stage.execute(reads, draft, output, receipt, 1, runner=runner, known_models=())
+    result = medaka_stage.execute(reads, draft, output, receipt, 1, runner=runner, known_models=(),model_mapping={'modelA': ('fixture-model', None), 'modelB': ('fixture-model', None), 'model': ('fixture-model', None)})
     assert Path(result['attempt']) != failed
     assert (failed / 'consensus.publish.tmp').read_bytes() == saved
     assert old_scratch.read_text() == 'previous incomplete publication'

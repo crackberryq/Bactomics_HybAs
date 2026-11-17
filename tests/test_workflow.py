@@ -37,7 +37,9 @@ def prepare(tmp, modes, polish='tripolish', pp=True, kraken=False):
     config=dict(base_dir=str(tmp),sample_sheet=str(samples),threads=2,run_kraken=kraken,
         kraken_decision_mode='aware' if kraken else 'off',run_busco=False,run_prokka=False,run_multiqc=True,
         run_polypolish=pp,polish_mode=polish,racon_rounds=2,db_root='db',kraken_db_name='kraken',
-        assembly_mem_mb=1024,spades_memory_gb=1,polishing_mem_mb=512,medaka_model='fixture-reviewed-model')
+        assembly_mem_mb=1024,spades_memory_gb=1,polishing_mem_mb=512,medaka_model='fixture-reviewed-model',
+        medaka_model_review_acknowledged=True,medaka_model_review_reason='synthetic fixture only',
+        medaka_model_reviewed_model='fixture-reviewed-model')
     path=tmp/'config.yaml';path.write_text(yaml.safe_dump(config))
     env=dict(os.environ,PATH=str(binpath)+os.pathsep+str(Path(SNAKE).parent)+os.pathsep+os.environ['PATH'],
              HYBAS_TEST_CALLS=str(tmp/'calls.jsonl'))

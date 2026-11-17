@@ -1,0 +1,15 @@
+name: hybas-multiqc
+channels:
+- conda-forge
+dependencies:
+- python=3.11
+- pip
+# Keep the entire reporting stack pip-owned: the MultiQC 1.32 Conda recipe
+# omits declared Python dependencies, and its deprecated polars-lts-cpu alias
+# does not provide the upstream distribution. Do not mix the Polars packages.
+- pip:
+  - multiqc==1.32
+  - polars-lts-cpu==1.33.1
+  # MultiQC 1.32 requires Kaleido 0.2.1, separate from NanoPlot's renderer.
+  - plotly==6.0.1
+  - kaleido==0.2.1

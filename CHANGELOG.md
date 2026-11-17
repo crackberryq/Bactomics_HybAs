@@ -1,3 +1,12 @@
+## 10.0.0a5 — environment reliability candidate (unreleased)
+
+- Preflight Medaka against all raw ONT model metadata before read processing or assembly; bind reviewed unmatched choices to the exact model, preserve failures, and recheck filtered reads/model/software before consensus. Model acknowledgement does not establish scientific suitability.
+- Require a fresh pinned Medaka environment to pass native startup and model-interface checks without downloading weights or running inference.
+- Separate NanoPlot and MultiQC environments to satisfy their incompatible Kaleido dependencies; capture MultiQC versions from its own manifest.
+- Require real synthetic CLI HTML and PNG rendering checks in fresh Conda environments before publication. Provision Chrome explicitly before the NanoPlot check; no browser is downloaded by the checks.
+- Retain dated rendering-runtime observations, including external browser or bundled renderer identities, without treating observed dependencies as proof of plot execution.
+- Preserve existing native outputs and provenance. Local NanoPlot PNG qualification remains blocked by the execution environment; exact-source CI and workstation acceptance remain required.
+
 ## 10.0.0a4 — explicit swap scheduling
 
 - Honor `bactologix_compute.swap_mb` as an additional scheduler allowance when the supplied Snakemake `mem_mb` contains both RAM and swap. Keep native physical-RAM ceilings, the 80% Auto policy, and all tool memory defaults separate and unchanged.
