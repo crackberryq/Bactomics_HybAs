@@ -114,6 +114,16 @@ def keyvalues(rows):
 
 def methods_text(bundle):
     s=bundle['summary']
+    medaka_fallback = ''
+    if 'medaka' in (s.get('executed_stages') or []) and s.get('medaka_model_selection') == 'fallback':
+        medaka_fallback = (
+            f"Medaka used the documented consensus default {s.get('medaka_model_fallback_default','not recorded')} "
+            f"for Medaka {s.get('medaka_model_fallback_medaka_version','not recorded')} because "
+            f"{s.get('medaka_model_selection_reason','not recorded')}. "
+            f"The effective model was {s.get('medaka_model_effective','not recorded')} "
+            f"(SHA256 {s.get('medaka_model_sha256','not recorded')}); "
+            f"the default was defined in upstream source {s.get('medaka_model_fallback_source_commit','not recorded')}. "
+            "This fallback was not a match to the read metadata and does not establish scientific suitability. ")
     stages=s.get('executed_stages')
     stages=', '.join(stages) if isinstance(stages,list) else 'not recorded'
     return (f"Sample {s.get('isolate','not recorded')} was processed using {s.get('workflow_version','not recorded')} in {s.get('run_mode','not recorded')} mode. "
@@ -122,7 +132,8 @@ def methods_text(bundle):
             f"Recorded AWARE decision mode: {s.get('kraken_decision_mode','not recorded')}; selected target: {s.get('kraken_selected_target_name','not recorded')} "
             f"(taxid {s.get('kraken_selected_target_taxid','not recorded')}). "
             f"BUSCO enabled: {s.get('run_busco','not recorded')}; lineage: {s.get('busco_lineage','not recorded')}. "
-            f"Prokka enabled: {s.get('run_prokka','not recorded')}. "
+            f"Prokka enabled: {s.get('run_prokka','not recorded')}. " +
+            medaka_fallback +
             "This draft describes the saved run; review it alongside the recorded configuration and tool versions before publication.")
 
 
@@ -182,10 +193,17 @@ def render_report(data):
         assembly+=panel('Medaka model provenance',pairs([('Requested model',s.get('medaka_model_requested',s.get('medaka_model'))),
             ('Effective model',s.get('medaka_model_effective')),('Model SHA256',s.get('medaka_model_sha256')),
             ('Selection',s.get('medaka_model_selection')),('Read model metadata',s.get('medaka_input_metadata_status')),
+            ('Selection policy',s.get('medaka_model_selection_policy')),
+            ('Selection reason',s.get('medaka_model_selection_reason')),
+            ('Documented fallback default',s.get('medaka_model_fallback_default')),
+            ('Fallback Medaka version',s.get('medaka_model_fallback_medaka_version')),
+            ('Fallback upstream source commit',s.get('medaka_model_fallback_source_commit')),
             ('Installed-mapping assessment',s.get('medaka_model_review_status')),
             ('Explicit review acknowledged',s.get('medaka_model_review_acknowledged')),
             ('Model bound to review',s.get('medaka_model_reviewed_model')),
             ('Recorded review reason',s.get('medaka_model_review_reason'))])+
+            ('<p><strong>Documented default fallback was used; this was not a match to the read metadata '
+             'and does not establish scientific suitability.</strong></p>' if s.get('medaka_model_selection')=='fallback' else '')+
             '<p class="small muted">An explicitly selected model with missing or mixed read metadata needs researcher review. '
             'A mapping match or recorded acknowledgement does not validate model suitability. '
             'Successful execution is not evidence of improved accuracy.</p>')

@@ -19,7 +19,22 @@ import tempfile
 from library_inputs import fastq
 from workflow_support import sha256_file, require_fasta, write_json
 
-MODEL_REVIEW_CONTRACT = 1
+MODEL_REVIEW_CONTRACT = 2
+SELECTION_POLICIES = ('strict', 'documented_default')
+DOCUMENTED_DEFAULT = {
+    'medaka_version': '2.2.0',
+    'model': 'r1041_e82_400bps_sup_v5.2.0',
+    'upstream_source_commit': '019a2ab597218a1c239fb7a5315f271a4577ed6b',
+    'options_sha256': '16af07e1530bd30950cd22954e084b4d8f92316d0bc41ecd5669e768eb707f8e',
+    'basis': 'upstream_non_bacterial_consensus_default',
+    'metadata_match': False,
+    'scientific_suitability': 'not_assessed',
+}
+
+
+def installed_defaults():
+    from medaka import options
+    return {**dict(options.default_models), 'options_sha256': sha256_file(options.__file__)}
 
 
 def installed_mapping():
@@ -112,7 +127,44 @@ def require_review(requested, metadata, assessment):
               '; scientific suitability is not established. See model receipt.', flush=True)
 
 
-def resolve_effective_model(reads, requested, metadata, runner, record=None, record_path=None, automatic_model=None):
+def selection_decision(requested, metadata, assessment, policy, runtime):
+    """Choose before native resolution; never retry a failed resolver with another model."""
+    if policy not in SELECTION_POLICIES:
+        raise ValueError('medaka_model_selection_policy must be strict or documented_default')
+    if requested:
+        require_review(requested, metadata, assessment)
+        return {'selection': 'explicit', 'selected_model': requested,
+                'selection_reason': 'researcher_explicit_choice'}
+    if assessment['status'] == 'matched_to_installed_mapping':
+        return {'selection': 'automatic_from_complete_read_metadata',
+                'selected_model': assessment['expected_consensus_model'],
+                'selection_reason': 'exact_installed_basecaller_mapping'}
+    if policy == 'strict':
+        require_review(requested, metadata, assessment)
+    # Mixed identities or partial annotations cannot be described as a single
+    # absent/unsupported basecaller. Require an explicit reviewed choice.
+    if not metadata['basecaller_models']:
+        reason = 'basecaller_metadata_absent'
+    elif metadata['status'] == 'single_model_recorded' and assessment['status'] == 'unsupported_basecaller':
+        reason = 'basecaller_model_unsupported'
+    else:
+        raise ValueError('Documented Medaka fallback is unavailable for mixed, incomplete or unavailable '
+                         'model mapping evidence. Review an explicit model choice; no model was substituted.')
+    if runtime.get('medaka_version') != DOCUMENTED_DEFAULT['medaka_version']:
+        raise ValueError('Documented fallback requires the reviewed Medaka 2.2.0 runtime')
+    # A missing/import-broken model table is a runtime failure, not absent read metadata.
+    defaults = installed_defaults()
+    if (defaults.get('consensus') != DOCUMENTED_DEFAULT['model']
+            or defaults.get('options_sha256') != DOCUMENTED_DEFAULT['options_sha256']):
+        raise ValueError('Installed Medaka default differs from the reviewed source; no fallback was substituted')
+    print('WARNING: Using documented Medaka 2.2.0 consensus default ' + DOCUMENTED_DEFAULT['model'] +
+          ' because ' + reason + '. This is not a metadata match or scientific validation.', flush=True)
+    return {'selection': 'fallback', 'selected_model': DOCUMENTED_DEFAULT['model'],
+            'selection_reason': reason, 'fallback': dict(DOCUMENTED_DEFAULT)}
+
+
+def resolve_effective_model(reads, requested, metadata, runner, record=None, record_path=None, automatic_model=None,
+                            decision=None):
     args = ['medaka', 'tools', 'resolve_model']
     # Resolve the exact all-read mapping decision; do not delegate to Medaka's
     # first-100-record/substr parser after this stricter inspection.
@@ -131,7 +183,7 @@ def resolve_effective_model(reads, requested, metadata, runner, record=None, rec
     return {'requested': requested or None, 'effective_path': path,
             'effective_model': Path(path).name, 'sha256': sha256_file(path),
             'selection': 'explicit' if requested else 'automatic_from_complete_read_metadata',
-            'input_metadata': metadata}
+            'input_metadata': metadata, **(decision or {})}
 
 
 def _selection_record(record, paths, requested, mapping, known_models, acknowledged, reason, reviewed_model):
@@ -143,7 +195,12 @@ def _selection_record(record, paths, requested, mapping, known_models, acknowled
                 'reads': sum(item['reads'] for item in records), 'reads_without_resolved_model_metadata': missing}
     record['input_metadata'] = metadata
     record['model_review'] = review_model(requested, metadata, mapping, acknowledged, reason, reviewed_model)
-    require_review(requested, metadata, record['model_review'])
+    # Unavailable installed mapping is an environment fault, even if read
+    # annotations are also missing. Do not turn it into a default decision.
+    if not mapping and not requested and record['model_selection_policy'] == 'documented_default':
+        raise ValueError('Automatic Medaka selection is unavailable: installed_mapping_unavailable')
+    record['model_decision'] = selection_decision(requested, metadata, record['model_review'],
+                                                  record['model_selection_policy'], record)
     return metadata
 
 
@@ -157,7 +214,8 @@ def _failure(record, exc):
 
 
 def preflight(reads, receipt, requested='', review_acknowledged=False, review_reason='',
-              runner=subprocess.run, model_mapping=None, known_models=None, reviewed_model=''):
+              runner=subprocess.run, model_mapping=None, known_models=None, reviewed_model='',
+              selection_policy='strict'):
     """Inspect every raw read before costly work; execution rechecks filtered reads."""
     paths, receipt = [Path(path) for path in reads], Path(receipt)
     if not paths:
@@ -165,15 +223,16 @@ def preflight(reads, receipt, requested='', review_acknowledged=False, review_re
     attempts = receipt.parent / 'preflight_attempts'; attempts.mkdir(parents=True, exist_ok=True)
     attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=attempts))
     record = {'schema': 'hybas-medaka-preflight-v1', 'status': 'started',
+              'model_review_contract': MODEL_REVIEW_CONTRACT, 'model_selection_policy': selection_policy,
               'requested_model': requested or None, 'attempt': str(attempt.resolve()), **runtime_identity()}
-    mapping = installed_mapping() if model_mapping is None else model_mapping
-    known_models = tuple(mapping) if known_models is None else known_models
     try:
+        mapping = installed_mapping() if model_mapping is None else model_mapping
+        known_models = tuple(mapping) if known_models is None else known_models
         record['inputs_sha256'] = {str(path.resolve()): sha256_file(path) for path in paths}
         metadata = _selection_record(record, paths, requested, mapping, known_models, review_acknowledged, review_reason, reviewed_model)
         write_json(attempt / 'execution.json', record)
         record['model'] = resolve_effective_model(paths[0], requested, metadata, runner, record, attempt / 'execution.json',
-                                                  record['model_review']['expected_consensus_model'])
+                                                  record['model_decision']['selected_model'], record['model_decision'])
         if record['inputs_sha256'] != {str(path.resolve()): sha256_file(path) for path in paths}:
             raise ValueError('ONT input changed during Medaka preflight')
         if record['model']['sha256'] != sha256_file(record['model']['effective_path']):
@@ -188,12 +247,14 @@ def preflight(reads, receipt, requested='', review_acknowledged=False, review_re
 
 
 def execute(reads, draft, output, receipt, threads, requested='', runner=subprocess.run, known_models=None,
-            model_mapping=None, review_acknowledged=False, review_reason='', preflight_receipt=None, reviewed_model=''):
+            model_mapping=None, review_acknowledged=False, review_reason='', preflight_receipt=None, reviewed_model='',
+            selection_policy='strict'):
     reads, draft, output, receipt = map(Path, (reads, draft, output, receipt))
     output.parent.mkdir(parents=True, exist_ok=True)
     attempts = output.parent / 'attempts'; attempts.mkdir(exist_ok=True)
     attempt = Path(tempfile.mkdtemp(prefix='attempt-', dir=attempts))
     record = {'schema': 'hybas-medaka-execution-v1', 'status': 'started',
+              'model_review_contract': MODEL_REVIEW_CONTRACT, 'model_selection_policy': selection_policy,
               'attempt': str(attempt.resolve()), 'cache_policy': 'fresh_directory_per_scheduled_execution',
               'requested_model': requested or None, **runtime_identity()}
     try:
@@ -203,11 +264,14 @@ def execute(reads, draft, output, receipt, threads, requested='', runner=subproc
         metadata = _selection_record(record, [reads], requested, mapping, known_models, review_acknowledged, review_reason, reviewed_model)
         write_json(attempt / 'execution.json', record)
         record['model'] = resolve_effective_model(reads, requested, metadata, runner, record, attempt / 'execution.json',
-                                                  record['model_review']['expected_consensus_model'])
+                                                  record['model_decision']['selected_model'], record['model_decision'])
         if preflight_receipt:
             prior = json.loads(Path(preflight_receipt).read_text())
             record['preflight_receipt_sha256'] = sha256_file(preflight_receipt)
             if (prior.get('schema') != 'hybas-medaka-preflight-v1' or prior.get('status') != 'completed'
+                    or prior.get('model_review_contract') != MODEL_REVIEW_CONTRACT
+                    or prior.get('model_selection_policy') != selection_policy
+                    or prior.get('model_decision') != record['model_decision']
                     or prior.get('requested_model') != (requested or None)
                     or prior.get('model', {}).get('sha256') != record['model']['sha256']
                     or prior.get('medaka_version') != record['medaka_version']
@@ -254,6 +318,7 @@ def main():
         parser.add_argument('--' + key, required=True)
     parser.add_argument('--threads', type=int, default=1)
     parser.add_argument('--requested', default='')
+    parser.add_argument('--selection-policy', choices=SELECTION_POLICIES, default='strict')
     parser.add_argument('--review-acknowledged', action='store_true')
     parser.add_argument('--review-reason', default='')
     parser.add_argument('--reviewed-model', default='')

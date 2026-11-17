@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a5 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a6 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -124,6 +124,7 @@ DEFAULT_MEDAKA_MODEL     = str(config.get("medaka_model", ""))
 MEDAKA_REVIEW_ACKNOWLEDGED = config.get("medaka_model_review_acknowledged", False)
 MEDAKA_REVIEW_REASON = config.get("medaka_model_review_reason", "")
 MEDAKA_REVIEWED_MODEL = config.get("medaka_model_reviewed_model", "")
+MEDAKA_SELECTION_POLICY = config.get("medaka_model_selection_policy", "strict")
 DEFAULT_TARGET_TAXID     = manual_taxid(config.get("target_taxid"))
 
 RUN_KRAKEN               = as_bool(config.get("run_kraken", True))
@@ -3292,6 +3293,7 @@ rule medaka_model_preflight:
     output:
         receipt=medaka_preflight_receipt("{isolate}")
     params:
+        selection_policy=MEDAKA_SELECTION_POLICY,
         model_arg=lambda wc: shlex.quote(ISO_OVERRIDES[wc.isolate]["medaka_model"]),
         review_ack="--review-acknowledged" if MEDAKA_REVIEW_ACKNOWLEDGED else "",
         review_reason_arg=shlex.quote(MEDAKA_REVIEW_REASON),
@@ -3308,7 +3310,7 @@ rule medaka_model_preflight:
         r"""
         mkdir -p "$(dirname "{log}")"
         python {input.adapter:q} --preflight --reads {input.reads:q} --receipt {output.receipt:q} \
-          --requested {params.model_arg} {params.review_ack} --review-reason {params.review_reason_arg} --reviewed-model {params.reviewed_model_arg} > {log:q} 2>&1
+          --requested {params.model_arg} --selection-policy {params.selection_policy:q} {params.review_ack} --review-reason {params.review_reason_arg} --reviewed-model {params.reviewed_model_arg} > {log:q} 2>&1
         """
 
 rule medaka:
@@ -3324,6 +3326,7 @@ rule medaka:
         consensus=stage_medaka("{isolate}"),
         receipt=os.path.join(work_medaka_dir("{isolate}"), "execution.json")
     params:
+        selection_policy=MEDAKA_SELECTION_POLICY,
         polish=POLISH_MODE, rounds=RACON_ROUNDS,
         outdir=lambda wc: work_medaka_dir(wc.isolate),
         logdir=lambda wc: logs_dir(wc.isolate),
@@ -3353,7 +3356,7 @@ rule medaka:
         mkdir -p "{params.outdir}" "{params.logdir}"
         python {input.adapter:q} --reads {input.ont:q} --draft {input.prev:q} \
           --output {output.consensus:q} --receipt {output.receipt:q} \
-          --threads {threads} --requested {params.model_arg} {params.review_ack} \
+          --threads {threads} --requested {params.model_arg} --selection-policy {params.selection_policy:q} {params.review_ack} \
           --review-reason {params.review_reason_arg} --reviewed-model {params.reviewed_model_arg} --preflight-receipt {input.model_preflight:q}
         ) > "{log}" 2>&1
         """
@@ -4234,6 +4237,11 @@ rule run_summary:
             "medaka_model_effective": execution.get("medaka", {}).get("model", {}).get("effective_model"),
             "medaka_model_sha256": execution.get("medaka", {}).get("model", {}).get("sha256"),
             "medaka_model_selection": execution.get("medaka", {}).get("model", {}).get("selection", "not_requested"),
+            "medaka_model_selection_policy": execution.get("medaka", {}).get("model_selection_policy"),
+            "medaka_model_selection_reason": execution.get("medaka", {}).get("model", {}).get("selection_reason"),
+            "medaka_model_fallback_default": execution.get("medaka", {}).get("model", {}).get("fallback", {}).get("model"),
+            "medaka_model_fallback_source_commit": execution.get("medaka", {}).get("model", {}).get("fallback", {}).get("upstream_source_commit"),
+            "medaka_model_fallback_medaka_version": execution.get("medaka", {}).get("model", {}).get("fallback", {}).get("medaka_version"),
             "medaka_model_review_status": execution.get("medaka", {}).get("model_review", {}).get("status"),
             "medaka_model_review_reason": execution.get("medaka", {}).get("model_review", {}).get("review_reason"),
             "medaka_model_review_acknowledged": execution.get("medaka", {}).get("model_review", {}).get("review_acknowledged"),

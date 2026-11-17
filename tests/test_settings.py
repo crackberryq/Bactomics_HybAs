@@ -334,3 +334,15 @@ def test_cgroup_v1_mount_root_and_namespace(tmp_path):
     result = cgroup_limits(proc)
     assert result["memory_bytes"] == [2000000000]
     assert result["cpu_quotas"] == [1.0]
+
+
+def test_medaka_policy_is_explicit_and_old_configuration_stays_strict(tmp_path):
+    assert resolve(tmp_path).config['medaka_model_selection_policy'] == 'strict'
+    selected = resolve(tmp_path, {'medaka_model_selection_policy': 'documented_default'})
+    assert selected.config['medaka_model_selection_policy'] == 'documented_default'
+    selected.persist()
+    assert resolve(tmp_path, {'medaka_model_selection_policy': 'documented_default'}).reused
+    assert resolve(tmp_path, {'medaka_model_selection_policy': 'strict'}).settings_id != selected.settings_id
+    for value in ('auto', True, None, 'guess'):
+        with pytest.raises(ValueError, match='medaka_model_selection_policy'):
+            resolve(tmp_path, {'medaka_model_selection_policy': value})

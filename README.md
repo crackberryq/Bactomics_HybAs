@@ -1,4 +1,6 @@
-> **Environment reliability candidate:** [10.0.0a5](docs/RELEASE_10.0.0a5.md) separates the NanoPlot and MultiQC rendering environments and strengthens native environment checks. Qualification is pending until the exact source passes the required CI gates.
+> **Medaka selection candidate:** [10.0.0a6](docs/RELEASE_10.0.0a6.md) adds a recorded, source-checked documented-default policy for new drafts. Explicit model choices take priority; existing configurations retain strict selection. Exact-source CI qualification is required.
+
+> **Environment reliability update:** [10.0.0a5](docs/RELEASE_10.0.0a5.md) separates NanoPlot and MultiQC rendering environments and strengthens native environment checks.
 
 > **Scheduling patch:** [10.0.0a4](docs/RELEASE_10.0.0a4.md) separates an explicitly declared swap allowance from native physical-RAM and tool settings.
 
@@ -12,8 +14,8 @@
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
-**Development candidate: 10.0.0a5 — Alpha.** See the
-[release status](docs/RELEASE_10.0.0a5.md) and
+**Development candidate: 10.0.0a6 — Alpha.** See the
+[release status](docs/RELEASE_10.0.0a6.md) and
 [BaSIS-aligned update conventions](docs/RELEASE_CONVENTIONS.md).
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)

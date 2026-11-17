@@ -14,6 +14,10 @@ keep_percent: 95
 racon_rounds: 2
 busco_lineage: bacteria_odb10
 medaka_model: ''
+# New drafts may use the upstream 2.2.0 default for absent/unsupported metadata.
+# Use strict to require an exact mapping or reviewed explicit model instead.
+# Omitted policy remains strict for existing configurations.
+medaka_model_selection_policy: documented_default
 # Explicit choices without an installed basecaller mapping require documented review.
 # This acknowledgement does not establish scientific suitability or change read metadata.
 medaka_model_review_acknowledged: false
@@ -33,7 +37,7 @@ allow_ont_only: true
 allow_illumina_only: true
 require_target_taxid_for_kraken: false
 polish_mode: auto
-workflow_version: HybAs-AWARE-10.0.0a5
+workflow_version: HybAs-AWARE-10.0.0a6
 db_root: db
 kraken_db_name: kraken2_std_db
 kraken_decision_mode: aware

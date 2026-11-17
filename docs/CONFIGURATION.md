@@ -41,3 +41,5 @@ for precedence, hardware detection and frozen resume behavior. Local paths are r
 Default AWARE election, platform-specific actions and conservative confidence remain separate. Confidence parameters affect confidence labels, not the cleaning action thresholds. `kraken_decision_mode: auto` keeps its original algorithm meaning. `polish_mode: auto` selects the existing preset and input-compatible stages; it adds no new polishing algorithm.
 
 The shipped `examples/ci/config.ci.yaml` is a small input profile, not a biological validation benchmark. Software tests create isolated synthetic data and configuration dynamically.
+
+For `medaka_model_selection_policy`, explicit choices and documented fallback limits, see [Medaka model selection](MEDAKA_SELECTION.md).

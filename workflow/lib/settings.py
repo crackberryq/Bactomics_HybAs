@@ -19,6 +19,7 @@ POLICY_VERSION = 1
 BASELINE = {
     "keep_percent": 95, "racon_rounds": 2, "busco_lineage": "bacteria_odb10",
     "medaka_model": "", "medaka_model_review_acknowledged": False, "medaka_model_review_reason": "", "medaka_model_reviewed_model": "",
+    "medaka_model_selection_policy": "strict",
     "target_taxid": "", "allow_ont_only": True,
     "allow_illumina_only": True, "require_target_taxid_for_kraken": False,
     "kraken_decision_mode": "manual", "min_fasta_length": 1000,
@@ -313,6 +314,8 @@ class SettingsResolution:
             raise ValueError('medaka_model_reviewed_model must be text')
         if not isinstance(cfg['medaka_model_review_reason'], str) or len(cfg['medaka_model_review_reason']) > 4096:
             raise ValueError('medaka_model_review_reason must be text of at most 4096 characters')
+        if cfg['medaka_model_selection_policy'] not in ('strict', 'documented_default'):
+            raise ValueError('medaka_model_selection_policy must be strict or documented_default')
         cpus = self.capacity["usable_cpus"]
         if self.scheduler["cores"]:
             cpus = min(cpus, positive_int(self.scheduler["cores"], "Snakemake cores"))

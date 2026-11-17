@@ -1,4 +1,12 @@
-## 10.0.0a5 — environment reliability candidate (unreleased)
+## 10.0.0a6 — documented Medaka fallback (unreleased)
+
+- New templates select a source-checked Medaka 2.2.0 documented-default policy: researcher model first, then exact basecaller mapping, then the upstream consensus default for wholly absent metadata or one unsupported basecaller. Existing configurations without the policy remain strict.
+- Keep mixed or partially annotated inputs subject to explicit model review. Never select another model after a resolution, download, input, device or inference error; never silently omit Medaka.
+- Record fallback policy, reason, upstream source/default identity and actual model hash in receipts, summaries, reports and Methods. A documented default is not a metadata match or scientific validation.
+- Bind execution to the preflight decision and preserve all earlier outputs. Add capability contract version 2; older Bactologix approvals do not enable the new policy.
+- Exercise actual installed Medaka model resolution against bundled weights, without downloading weights or running inference. Exact-source CI remains the publication gate.
+
+## 10.0.0a5 — environment reliability
 
 - Preflight Medaka against all raw ONT model metadata before read processing or assembly; bind reviewed unmatched choices to the exact model, preserve failures, and recheck filtered reads/model/software before consensus. Model acknowledgement does not establish scientific suitability.
 - Require a fresh pinned Medaka environment to pass native startup and model-interface checks without downloading weights or running inference.
