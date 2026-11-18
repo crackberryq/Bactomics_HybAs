@@ -1,10 +1,10 @@
 cff-version: 1.2.0
 message: >-
-  When reporting research that used HybAs, cite Jimi Goldstein and the version
-  or commit used. See the LICENSE file supplied with this version for its terms.
+  If you use HybAs Aware, please cite the software repository using the
+  metadata below. Update this file later to point to the associated paper
+  once it is publicly available.
 title: "HybAs AWARE 10.0.0a6 — Alpha"
 type: software
-license-url: "https://github.com/crackberryq/Bactomics_HybAs/blob/development/LICENSE"
 abstract: >-
   Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
   provenance capture, and downstream genome analysis.
@@ -14,6 +14,7 @@ authors:
     affiliation: "Human Link"
 repository-code: "https://github.com/crackberryq/Bactomics_HybAs"
 url: "https://github.com/crackberryq/Bactomics_HybAs"
+license: "MIT"
 keywords:
   - "bacterial genome assembly"
   - "hybrid assembly"
