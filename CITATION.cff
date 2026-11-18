@@ -4,6 +4,7 @@ message: >-
   or commit used. See the LICENSE file supplied with this version for its terms.
 title: "HybAs AWARE 10.0.0a6 — Alpha"
 type: software
+license-url: "https://github.com/crackberryq/Bactomics_HybAs/blob/development/LICENSE"
 abstract: >-
   Engineering-grade hybrid bacterial genome assembly, taxon-aware QC,
   provenance capture, and downstream genome analysis.
