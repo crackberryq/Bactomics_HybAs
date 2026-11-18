@@ -10,7 +10,7 @@
 
 # HybAs AWARE
 
-[![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Workflow regression](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/tests.yml) [![Environment checks](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml/badge.svg?branch=HybAs_v9.0.0-AWARE)](https://github.com/crackberryq/Bactomics_HybAs/actions/workflows/environments.yml) [Noncommercial Research Software Licence](LICENSE)
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
@@ -193,7 +193,7 @@ The dashboard launches Snakemake directly. It is not required for setup, executi
 
 ## Citation and license
 
-See [CITATION.cff](CITATION.cff) for citation metadata and [LICENSE](LICENSE) for license terms. Publication benchmark results belong to the version and inputs used to generate them; this update does not retroactively revalidate them.
+Noncommercial research use is free under the [Noncommercial Research Software Licence](LICENSE). Cite Jimi Goldstein and the software version when reporting results. Commercial use requires prior written permission from Jimi Goldstein. See [CITATION.cff](CITATION.cff) for the citation. Publication benchmark results belong to the version and inputs used to generate them; this update does not retroactively revalidate them.
 
 ## Repository maintenance and releases
 
