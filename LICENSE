@@ -1,23 +1,28 @@
-# LICENSE
-
-MIT License
-
 Copyright (c) 2026 Jimi Goldstein
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Noncommercial Research Software Licence
+Version 1.0
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Permission for research
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The copyright holders grant you permission, free of charge, to install, run, copy and modify the software covered by this licence solely for noncommercial research. This includes reproducing or validating published findings. You may publish and present your research results. Publishing in a journal that charges fees does not itself make your research commercial.
+
+2. Citation
+
+When you publicly report research that used this software, cite the software and credit Jimi Goldstein and any other authors identified for the release. This applies to papers, preprints, theses, public reports and presentations. Use the citation supplied with the release, for example in CITATION.cff, and identify the version or commit you used. If the release supplies no citation, give the software title, Jimi Goldstein and any other credited authors, the version or commit, and the repository URL or DOI.
+
+3. Sharing research copies
+
+You may share the original or modified software with others for noncommercial research. Include this licence and the existing copyright and attribution notices with each copy. Identify any changes you made and provide your modifications to recipients under these same terms.
+
+4. Commercial permission
+
+Any commercial use of the software requires prior written permission from Jimi Goldstein. This includes using the software to provide paid analyses or consulting, incorporating it into a commercial product or service, and using it to develop or validate a product for sale. This requirement applies even if the software itself is supplied free of charge. Jimi Goldstein may grant permission for rights he owns or is authorised to license.
+
+5. Scope
+
+This licence applies to the original project software in a distribution that includes or expressly adopts it. Third-party software, databases and other materials retain their own licences and attribution notices. Copies already supplied under an earlier licence retain the permissions granted with those copies. The copyright holders reserve all rights beyond those expressly granted here.
+
+6. Warranty and liability
+
+The software is provided as is. To the extent permitted by applicable law, the copyright holders and contributors disclaim warranties, including warranties of merchantability, fitness for a particular purpose and non-infringement, and accept no liability for loss or damage arising from use of the software.
