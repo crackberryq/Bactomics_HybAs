@@ -1,3 +1,7 @@
+## 10.0.0a7 — BUSCO lineage database preparation
+
+HybAs now locates the requested dataset in the BUSCO download's `lineages` directory, verifies its required files and installs it in the configured lineage folder. This fixes fresh downloads that previously stopped after decompression.
+
 ## 10.0.0a6 — documented Medaka fallback (unreleased)
 
 - New templates select a source-checked Medaka 2.2.0 documented-default policy: researcher model first, then exact basecaller mapping, then the upstream consensus default for wholly absent metadata or one unsupported basecaller. Existing configurations without the policy remain strict.

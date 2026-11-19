@@ -14,9 +14,9 @@
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
-**Development candidate: 10.0.0a6 — Alpha.** See the
-[release status](docs/RELEASE_10.0.0a6.md) and
-[BaSIS-aligned update conventions](docs/RELEASE_CONVENTIONS.md).
+**HybAs AWARE 10.0.0a7** fixes BUSCO database preparation when the downloaded
+dataset is extracted under `lineages/`. [Release notes](docs/RELEASE_10.0.0a7.md)
+· [Release conventions](docs/RELEASE_CONVENTIONS.md).
 
 **v10 development preview:** [Multi-platform input manifest](docs/V10_INPUTS.md)
 adds standalone metadata validation for the proposed sequencing modes, plus an

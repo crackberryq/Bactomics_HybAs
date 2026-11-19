@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a6 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a7 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -1976,9 +1976,7 @@ rule download_busco_lineage:
     output:
         touch(os.path.join(BUSCO_DB_DIR, "{lineage}", ".complete"))
     params:
-        dbdir=BUSCO_DB_DIR,
         lineage_dir=lambda wc: os.path.join(BUSCO_DB_DIR, wc.lineage),
-        checker=os.path.join(SOURCE_ROOT, "workflow", "scripts", "check_database.py"),
         readiness=lambda wc: valid_busco_db(os.path.join(BUSCO_DB_DIR, wc.lineage)),
         dataset=lambda wc: file_identity(os.path.join(BUSCO_DB_DIR, wc.lineage, "dataset.cfg"))
     conda: "workflow/envs/qc.yml"
@@ -1989,21 +1987,9 @@ rule download_busco_lineage:
         os.path.join(provenance_runtime_dir(), "benchmarks", "download_busco_lineage_{lineage}.tsv")
     shell:
         r"""
-        mkdir -p "{params.dbdir}" "$(dirname "{log}")"
-        (
-          if python "{params.checker}" "{params.lineage_dir}"; then
-            echo "Verified BUSCO dataset already present"
-          else
-            tempdir=$(mktemp -d "{params.dbdir}/.download.{wildcards.lineage}.XXXXXX")
-            busco --download "{wildcards.lineage}" --download_path "$tempdir"
-            python "{params.checker}" "$tempdir/{wildcards.lineage}"
-            if [ -e "{params.lineage_dir}" ]; then
-              mv "{params.lineage_dir}" "$tempdir/previous-incomplete"
-            fi
-            mv "$tempdir/{wildcards.lineage}" "{params.lineage_dir}"
-          fi
-          touch "{output}"
-        ) > "{log}" 2>&1
+        mkdir -p "$(dirname {log:q})"
+        python {input.checker:q} --prepare {params.lineage_dir:q} > {log:q} 2>&1
+        touch {output:q}
         """
 
 rule download_busco_db:
