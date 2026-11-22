@@ -160,3 +160,26 @@ def test_zero_completeness_and_model_provenance_remain_visible(tmp_path):
     assert 'BUSCO complete</small><strong>0%' in html
     assert 'Analytical suitability: not assessed' in html
     assert 'resolved-model.tar.gz' in html and 'abc123' in html and 'mixed' in html
+
+
+def test_offline_edition_preserves_audit_and_links_requested_reports(tmp_path):
+    iso = fixture(tmp_path)
+    run(tmp_path, "--audit-reads")
+    archive = iso / "reports/hybas_research"
+    # The records still describe the original audit after the working inputs are archived.
+    (iso / "metadata/kraken_decision.tsv").unlink()
+    fresh = tmp_path / "report editions/new"
+    validation = fresh / "validation"
+    trajectory = fresh / "trajectory"
+    for folder in (validation, trajectory):
+        folder.mkdir(parents=True)
+        (folder / "index.html").write_text("report")
+    (validation / "summary.html").write_text("<h2>Polishing validation</h2><p>Density atlas fixture</p>")
+    research = fresh / "research"
+    run(tmp_path, "--outdir", research, "--audit-from", archive, "--validation-dir", validation, "--trajectory-dir", trajectory)
+    page = (research / "hybas_report.html").read_text()
+    assert page.count("Density atlas fixture") == 1
+    assert "href='#polishing-validation'" in page
+    assert 'href="../validation/index.html"' in page and 'href="../trajectory/index.html"' in page
+    for filename in ("aware_filter_audit.json","aware_removed_taxa.tsv","aware_removed_categories.tsv"):
+        assert (archive / filename).read_bytes() == (research / filename).read_bytes()

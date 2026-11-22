@@ -4,6 +4,7 @@ import hashlib
 import html
 import json
 from pathlib import Path
+from report_theme import evidence_page
 
 SCHEMA = 'hybas-identification-review-v1'
 DECISION_SCHEMA = 'hybas-identification-decision-v1'
@@ -89,13 +90,11 @@ def write_report(path, html_path, isolate, context_id, rows, recommendation, fil
     long_label = 'PacBio' if long_name == 'pacbio' else 'ONT'
     table = ''.join('<tr><td>' + esc(r['name']) + '</td><td>' + esc(r['taxid']) + '</td><td>' + esc(r['rank']) +
                     '</td><td>' + esc(r['illumina_pct']) + '</td><td>' + esc(r.get(long_name + '_pct', 0.0)) + '</td></tr>' for r in rows)
-    Path(html_path).write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
-        '<title>HybAs identification review</title><style>body{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:1rem;color:#18372b;background:#fff}'
-        'table{border-collapse:collapse;width:100%}td,th{padding:.6rem;text-align:left;border-bottom:1px solid #ccc}h1{color:#17664c}</style>'
-        '<h1>HybAs 10 — Experimental · AWARE+ identification</h1><p>Sample: ' + esc(isolate) + '</p><h2>Identification evidence</h2>' +
+    body = ('<section id="candidates" class="panel"><h2>Identification evidence</h2>' +
         ('<p>Filtering and assembly have not started. Return to Bactologix to choose a target and continue.</p>' if awaiting_review else '<p>Original identification evidence retained for the AWARE output bundle.</p>') +
         '<p>AWARE recommendation: ' + esc(recommendation.get('name') or 'No supported candidate') + ' · TaxID ' + esc(recommendation.get('taxid') or '—') + '</p>'
         '<p>Percentages are Kraken clade assignments. Nested taxa overlap and must not be added. Illumina units are pairs; long-read units are reads. '
         'An absent platform is not evidence against a target. Classification is database-dependent.</p>'
-        '<table><thead><tr><th>Taxon</th><th>TaxID</th><th>Rank</th><th>Illumina %</th><th>' + long_label + ' %</th></tr></thead><tbody>' + table + '</tbody></table></html>')
+        '<table><thead><tr><th>Taxon</th><th>TaxID</th><th>Rank</th><th>Illumina %</th><th>' + long_label + ' %</th></tr></thead><tbody>' + table + '</tbody></table></section>')
+    Path(html_path).write_text(evidence_page('AWARE identification review', isolate + ' · Experimental', body, [('candidates','Candidate evidence')]), encoding='utf8')
     return doc

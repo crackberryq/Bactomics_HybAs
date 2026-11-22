@@ -14,6 +14,7 @@ import logging
 import math
 import os
 from pathlib import Path
+from report_theme import evidence_page
 import platform
 import shutil
 import sys
@@ -142,9 +143,7 @@ def render_report(runtime_dir):
             "</tr></thead><tbody>" + "".join("<tr>" + "".join(f"<td>{cell(v)}</td>" for v in row) +
             "</tr>" for row in rows) + "</tbody></table>"
 
-    content = ["<!doctype html><html lang='en'><meta charset='utf-8'>",
-        "<title>HybAs computational record</title><style>body{font:15px system-ui;max-width:1300px;margin:32px auto;padding:0 20px;color:#173047}table{border-collapse:collapse;width:100%;margin:20px 0}th,td{padding:9px;text-align:left;border-bottom:1px solid #dbe4eb}th{background:#edf4f8}details{margin:20px 0;overflow:auto}small{color:#526575}</style>",
-        "<h1>Computational record</h1><p>One record per execution invocation. Earlier runs and retries are retained.</p>",
+    content = ['<section class="panel" id="history"><h2>Execution history</h2>',
         "<p>Elapsed time includes planning and scheduling. CPU time and memory come from sampled native job benchmarks. The largest job peak is <strong>not</strong> simultaneous workflow peak RAM. Missing values are unavailable, not zero. Rule success includes conditional rules that may skip their tool.</p>"]
     content.append(table(["Run (UTC)", "Status", "Elapsed seconds", "Attempts", "Measured CPU seconds", "Largest job RSS (MiB)"],
         [[r["started_at"], r["status"], r.get("elapsed_seconds"), r["totals"]["job_attempts"],
@@ -166,7 +165,7 @@ def render_report(runtime_dir):
               m.get("io_write_mib"), j.get("measurement_status", "pending")]
              for j in run["jobs"] for m in (j.get("measurements") or [{}])]))
         content.append("<small>Controller machine and runner: " + cell(json.dumps(run["machine"], sort_keys=True)) + "</small></details>")
-    content.append("</html>")
+    content.append("</section>")
     report_path = Path(runtime_dir) / "computational_report.html"
     if report_path.exists() or report_path.is_symlink():
         # The completion callback also renders outside scheduled jobs. Preserve
@@ -174,7 +173,7 @@ def render_report(runtime_dir):
         history = Path(runtime_dir) / "report_history"
         history.mkdir(parents=True, exist_ok=True)
         report_path.rename(history / ("computational-report-" + uuid.uuid4().hex + ".html"))
-    atomic_text(report_path, "\n".join(content))
+    atomic_text(report_path, evidence_page("Computational record", "One record per workflow invocation, including retries.", "\n".join(content), [("history","Execution history")]))
 
 
 class ComputationalRecorder(logging.Handler):

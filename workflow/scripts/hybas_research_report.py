@@ -6,59 +6,17 @@ import argparse
 import csv
 import html
 import json
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from aware_read_audit import audit, audit_long, decision
 from hybas_report_compat import evidence
 
-
-STYLE = """
-:root{--navy:#112d35;--ink:#1b2d40;--teal:#087c78;--paper:#f4f6f7;--line:#dce3e8;--muted:#5e6c79}
-*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.app{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:100vh}
-aside{background:var(--navy);color:#e1e9ec;padding:28px 18px;position:sticky;top:0;height:100vh}
-.brand{font-size:27px;font-weight:750;color:white;margin-bottom:6px}.sub{font-size:10px;letter-spacing:1.5px;color:#9fc6c5;margin-bottom:32px}
-aside a{display:block;color:#c7d8dc;text-decoration:none;padding:12px;border-radius:7px}aside a:hover{background:#25444d;color:white}
-main{padding:30px 38px;max-width:1500px;width:100%}
-.hero{background:linear-gradient(115deg,#142d43,#173e52);border-radius:17px;color:white;padding:35px;margin-bottom:24px}
-.hero h1{font-size:34px;margin:0 0 8px}.hero p{margin:0;color:#c9e3e6}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.stat,.panel{background:white;border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}
-.stat small{color:var(--muted);display:block}.stat strong{font-size:25px;display:block;overflow-wrap:anywhere}
-section{margin:34px 0}h2{font-size:23px}h3{font-size:16px}p.note{color:var(--muted)}
-table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;background:#edf3f2;color:#38565c}
-td,th{border-bottom:1px solid var(--line);padding:10px;vertical-align:top;overflow-wrap:anywhere}
-.table-wrap{overflow:auto;max-height:650px}tbody tr:hover{background:#f5f9f8}
-code{overflow-wrap:anywhere}.badge{display:inline-block;background:#e6f2ef;color:#087c78;padding:4px 10px;border-radius:5px;font-size:12px}
-.warn{background:#fff5df;color:#80540c;padding:12px;border-radius:8px}
-input{width:100%;padding:10px;border:1px solid var(--line);border-radius:7px;margin-bottom:10px}
-a{color:var(--teal)}footer{font-size:11px;color:var(--muted);padding:30px 0}
-@media(max-width:850px){.app{display:block}aside{position:static;height:auto}main{padding:16px}.grid{grid-template-columns:repeat(2,1fr)}}
-
-/* Bactologix-inspired refinement: clean hierarchy, responsive metrics and evidence graphs */
-:root{--navy:#102c35;--teal:#136d68;--paper:#f5f7f6;--line:#dce4e3;--muted:#6d7e84}
-body{font-size:14px;line-height:1.58}
-aside{background:#112d35;padding:34px 19px}
-aside a{font-size:13px;border-radius:9px;margin:4px 0}
-main{padding:34px 44px;max-width:1520px}
-.hero{background:radial-gradient(ellipse at 92% 0%,#276976 0%,transparent 52%),linear-gradient(115deg,#142d43,#173e52);padding:43px 40px;box-shadow:0 8px 28px #112d3510}
-.hero h1{font-weight:720;letter-spacing:-1px}
-.stat,.panel{box-shadow:0 3px 18px rgba(25,47,65,.045);border-radius:14px}
-.stat{position:relative;overflow:hidden;padding:23px}
-.stat:before{content:"";position:absolute;top:0;left:22px;width:30px;height:3px;background:#087c78}
-.stat strong{font-size:clamp(22px,2.6vw,34px);font-weight:740;letter-spacing:-.8px}
-section{margin-top:38px}section h2{font-weight:710;letter-spacing:-.5px}
-.table-wrap{border:1px solid var(--line);border-radius:9px;margin-top:14px}
-th{font-size:10px;text-transform:uppercase;letter-spacing:.7px;background:#f5f9f8}
-td{font-variant-numeric:tabular-nums}
-.stage-graph{padding:20px;background:#f8faf9;border:1px solid var(--line);border-radius:11px;margin:15px 0}
-.stage-bar-row{display:grid;grid-template-columns:minmax(130px,1fr) minmax(100px,2fr) 85px;gap:13px;align-items:center;margin:11px 0;font-size:12px}
-.stage-bar-row>span{overflow-wrap:anywhere}.stage-bar-row>strong{text-align:right;font-variant-numeric:tabular-nums}
-.stage-track{height:15px;border-radius:5px;background:#e1e9e6;overflow:hidden}
-.stage-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,#137e79,#6bc1ad)}
-@media(max-width:900px){main{padding:20px}.stage-bar-row{grid-template-columns:110px minmax(75px,1fr) 60px}}
-"""
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from report_theme import STYLE
 
 
 def read_json(path):
@@ -91,34 +49,55 @@ def write_tsv(path, rows, fields):
         writer.writerows(rows)
 
 
-def generate(isolate, output_dir, with_audit):
+def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_dir=None, audit_from=None):
+    trajectory_dir = Path(trajectory_dir or isolate / "reports/polishing_trajectory")
+    validation_dir = Path(validation_dir or isolate / "reports/polishing_validation")
+    def href(path):
+        return esc(quote(os.path.relpath(path, output_dir)))
+    def saved_audit(filename):
+        path = Path(audit_from) / filename
+        if not path.is_file():
+            return {"status": "unavailable", "note": "No retained audit record"}
+        data = json.loads(path.read_text(encoding="utf8"))
+        if not isinstance(data, dict) or not data.get("status"):
+            raise ValueError(f"Invalid retained filtering audit: {path}")
+        return data
     output_dir.mkdir(parents=True, exist_ok=True)
     dec = decision(isolate / "metadata/kraken_decision.tsv")
     summary = read_json(isolate / "metadata/run_summary.json")
     summary, historical_stages, evidence_sources = evidence(isolate, summary)
     execution = read_json(isolate / "metadata/polish_execution.json")
-    result = audit(isolate, output_dir, dec.get("selected_target_taxid", "")) if with_audit else {
-        "status": "not_requested", "note": "Use --audit-reads to reconcile merged and cleaned FASTQs."}
     platform = "pacbio" if summary.get("long_read_platform") == "pacbio" else "ont"
     platform_label = "PacBio" if platform == "pacbio" else "ONT"
-    ont = audit_long(isolate, output_dir, dec.get("selected_target_taxid", ""), platform) if with_audit else {"status": "not_requested"}
+    if audit_from:
+        result = saved_audit("aware_filter_audit.json")
+        ont = saved_audit(f"aware_{platform}_filter_audit.json")
+    elif with_audit:
+        target = dec.get("selected_target_taxid", "")
+        result = audit(isolate, output_dir, target)
+        ont = audit_long(isolate, output_dir, target, platform)
+    else:
+        result = {"status": "not_requested", "note": "Use --audit-reads to reconcile merged and cleaned FASTQs."}
+        ont = {"status": "not_requested"}
     (output_dir / f"aware_{platform}_filter_audit.json").write_text(json.dumps(ont, indent=2) + "\n", encoding="utf8")
     if ont["status"] == "completed":
         write_tsv(output_dir / f"aware_{platform}_removed_taxa.tsv", ont["by_taxon"],
                   ["taxid", "name", "rank", "category", "input_reads", "retained_reads", "removed_reads"])
         write_tsv(output_dir / f"aware_{platform}_removed_categories.tsv", ont["by_category"],
                   ["category", "input_reads", "retained_reads", "removed_reads"])
-    result["declared_illumina_action"] = dec.get("illumina_kraken_decision", "Not recorded")
-    result[f"declared_{platform}_action"] = dec.get(f"{platform}_kraken_decision", "Not recorded")
+    if not audit_from:
+        result["declared_illumina_action"] = dec.get("illumina_kraken_decision", "Not recorded")
+        result[f"declared_{platform}_action"] = dec.get(f"{platform}_kraken_decision", "Not recorded")
+        if result["status"] == "completed":
+            t = result["totals"]
+            observed_passthrough = result["integrity_ok"] and t["removed_pairs"] == 0
+            result["action_consistent"] = (
+                observed_passthrough if result["declared_illumina_action"] == "passthrough"
+                else result["integrity_ok"] if result["declared_illumina_action"] == "whitelist_filter"
+                else False)
+            result["action_verification_scope"] = (
+                "Observed read retention only; descendant whitelist membership is not independently verified.")
     if result["status"] == "completed":
-        t = result["totals"]
-        observed_passthrough = result["integrity_ok"] and t["removed_pairs"] == 0
-        result["action_consistent"] = (
-            observed_passthrough if result["declared_illumina_action"] == "passthrough"
-            else result["integrity_ok"] if result["declared_illumina_action"] == "whitelist_filter"
-            else False)
-        result["action_verification_scope"] = (
-            "Observed read retention only; descendant whitelist membership is not independently verified.")
         write_tsv(output_dir / "aware_removed_taxa.tsv", result["by_taxon"],
                   ["taxid", "name", "rank", "category", "input_pairs", "retained_pairs",
                    "removed_pairs", "partial_pairs"])
@@ -198,15 +177,21 @@ def generate(isolate, output_dir, with_audit):
                      table(["Stage", "Contigs", "Assembly (bp)", "N50 (bp)", "GC (%)"],
                            historical_rows)) if historical_rows else (
                      "")
-    if (isolate / "reports/polishing_trajectory/index.html").is_file():
-        import os
-        trajectory = os.path.relpath(isolate / "reports/polishing_trajectory", output_dir)
-        stage_section += (f'<h3>Polishing trajectory</h3><img style="max-width:100%" '
-                          f'src="{esc(trajectory)}/trajectory.svg" alt="Ordered polishing stages">'
-                          f'<p><a href="{esc(trajectory)}/index.html">Stage measurements, transitions and evidence</a></p>')
-    validation = isolate / "reports/polishing_validation/summary.html"
-    if validation.is_file():
-        stage_section += validation.read_text() + '<p><a href="../polishing_validation/index.html">Download polishing validation tables</a></p>'
+    trajectory_page = trajectory_dir / "index.html"
+    if trajectory_page.is_file():
+        stage_section += (f'<p><a href="{href(trajectory_page)}">Explore the polishing trajectory</a> · '
+                          'Compare BUSCO markers, short proteins and mean protein length across retained stages.</p>')
+    validation_fragment = validation_dir / "summary.html"
+    validation_section = ""
+    if validation_fragment.is_file():
+        validation_section = ('<!-- HybAs final-coordinate validation --><section id="polishing-validation">' +
+                              validation_fragment.read_text(encoding="utf8"))
+        if (validation_dir / "index.html").is_file():
+            validation_section += f'<p><a href="{href(validation_dir / "index.html")}">Open polishing validation and evidence tables</a></p>'
+        validation_section += '</section><!-- End HybAs final-coordinate validation -->'
+    elif (validation_dir / "index.html").is_file():
+        validation_section = (f'<section id="polishing-validation"><h2>Polishing validation</h2><p>'
+                              f'<a href="{href(validation_dir / "index.html")}">Open polishing validation</a></p></section>')
     provenance_rows = [{"Evidence": k, "Source": v} for k, v in sorted(evidence_sources.items())]
     if not dec:
         decision_notice = ("<p class='warn'>Historical run: AWARE decision metadata was not found. "
@@ -226,20 +211,39 @@ def generate(isolate, output_dir, with_audit):
                        "and does not establish scientific suitability.</p>")
     model_html += ("<p class='note'>An explicitly selected model with missing or mixed read metadata requires researcher review. "
                    "Successful execution does not establish improved accuracy. Missing legacy model provenance is not inferred.</p>")
-    compute_html = "<p><a href='../../../provenance/runtime/computational_report.html'>Computational resources and invocation history</a></p><p class='note'>Final resource totals are recorded when the workflow finishes. Missing measurements are not estimated.</p>"
+    compute_file = isolate.parent / "provenance/runtime/computational_report.html"
+    compute_html = (f"<p><a href='{href(compute_file)}'>Computational resources and invocation history</a></p>"
+                    if compute_file.is_file() else "<p class='note'>Computational resources are recorded at workflow completion.</p>")
+    exports = [("aware_filter_audit.json", "Illumina audit JSON"),
+               (f"aware_{platform}_filter_audit.json", f"{platform_label} audit JSON")]
+    for prefix, label, audit_record in [("aware", "Illumina", result), (f"aware_{platform}", platform_label, ont)]:
+        if audit_record["status"] == "completed":
+            exports.extend([(f"{prefix}_removed_taxa.tsv", f"{label} taxa TSV"),
+                            (f"{prefix}_removed_categories.tsv", f"{label} categories TSV")])
+    file_links = "<ul class='evidence-links'>" + "".join(f"<li><a href='{name}'>{esc(label)}</a></li>" for name,label in exports) + "</ul>"
+    nav_entries = [("overview","Overview"),("assembly","Assembly & polishing")]
+    if validation_section:
+        nav_entries.append(("polishing-validation","Polishing validation"))
+    nav_entries += [("aware","AWARE decisions"),("removed","Removed reads"),("provenance","Evidence files")]
+    navigation = "".join(f"<a href='#{anchor}'>{i:02d} · {esc(label)}</a>" for i,(anchor,label) in enumerate(nav_entries,1))
     generated = datetime.now(timezone.utc).isoformat()
     body = (
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<!doctype html><html lang='en' data-hybas-report='research'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>HybAs · " + esc(isolate.name) + "</title><style>" + STYLE + "</style></head><body>"
         "<div class='app'><aside><div class='brand'>HybAs</div><div class='sub'>BACTOMICS · RESEARCH EVIDENCE</div>"
-        "<a href='#overview'>01 · Overview</a><a href='#aware'>02 · AWARE decisions</a>"
-        "<a href='#removed'>03 · Removed reads</a><a href='#assembly'>04 · Assembly & polishing</a>"
-        "<a href='#provenance'>05 · Evidence files</a></aside><main>"
+        "<nav aria-label='Report sections'>" + navigation + "</nav></aside><main>"
         "<div class='hero'><h1>" + esc(isolate.name) + "</h1><p>HybAs 10 — Experimental · AWARE+ research report · input modes and polishing require validation</p></div>"
         "<section id='overview'><h2>Overview</h2><div class='grid'>" + stats + "</div>"
         "<p class='warn'><strong>Analytical suitability: not assessed.</strong> Recorded measurements and successful processing "
         "do not establish genome correctness or suitability for downstream negative findings.</p></section>"
+        "<section id='assembly'><h2>Assembly and polishing</h2><div class='panel'>" + stage_section +
+        key_values(execution, ["requested_polish_mode", "executed_stages", "skipped_stages", "final_source_stage"]) +
+        "<details><summary>Stage files and checksums</summary>" +
+        table(["Stage", "FASTA bases", "Contigs", "SHA256"], stage_rows) +
+        key_values(execution, ["final_source_path", "final_source_sha256"]) + "</details>" +
+        strategy_html + "<details><summary>Medaka model selection</summary>" + model_html + "</details></div></section>" +
+        validation_section +
         "<section id='aware'><h2>AWARE decision explorer</h2><div class='panel'>"
         "<p class='note'>Target election, per-platform read actions and conservative confidence are separate outputs. "
         "A low confidence label does not override a platform's passthrough.</p>" +
@@ -249,19 +253,9 @@ def generate(isolate, output_dir, with_audit):
         "<p class='note'>Kraken classifications are taxonomic assignments, not confirmed biological origin. "
         "Paired reads are counted once per normalized pair identifier. No read sequences or IDs are exported.</p>"
         "</div></section>"
-        "<section id='assembly'><h2>Assembly and polishing</h2><div class='panel'>" +
-        key_values(execution, ["requested_polish_mode", "run_mode", "planned_stages",
-                               "executed_stages", "skipped_stages", "final_source_stage",
-                               "final_source_path", "final_source_sha256"]) +
-        strategy_html + model_html + "<h3>Recorded assembly stages</h3>" +
-        table(["Stage", "FASTA bases", "Contigs", "SHA256"], stage_rows) + stage_section + "</div></section>"
         "<section id='provenance'><h2>Evidence and exports</h2><div class='panel'>" +
         compute_html + "<h3>Discovered evidence</h3>" + table(["Evidence", "Source"], provenance_rows) +
-        "<p><a href='aware_filter_audit.json'>Filtering audit JSON</a> · "
-        "<a href='aware_removed_taxa.tsv'>Taxon-level TSV</a> · "
-        "<a href='aware_removed_categories.tsv'>Category TSV</a> · " +
-        f"<a href='aware_{platform}_filter_audit.json'>{platform_label} audit JSON</a> · " +
-        f"<a href='aware_{platform}_removed_taxa.tsv'>{platform_label} taxon TSV</a></p>"
+        file_links +
         "<p class='note'>TSV exports exist only when a complete read audit was possible. "
         "Source files: metadata/kraken_decision.tsv, metadata/run_summary.json, "
         "metadata/polish_execution.json, reports/kraken2, work/inputs_merged, work/inputs_cleaned.</p>"
@@ -281,7 +275,11 @@ def main():
     p.add_argument("--base-dir", required=True, type=Path)
     p.add_argument("--isolate", required=True)
     p.add_argument("--outdir", type=Path)
-    p.add_argument("--audit-reads", action="store_true",
+    p.add_argument("--trajectory-dir", type=Path)
+    p.add_argument("--validation-dir", type=Path)
+    audit_group = p.add_mutually_exclusive_group()
+    audit_group.add_argument("--audit-from", type=Path, help="Restore saved filtering audit records for a new report edition")
+    audit_group.add_argument("--audit-reads", action="store_true",
                    help="Disk-backed comparison of merged/cleaned FASTQ IDs and saved Kraken assignments")
     args = p.parse_args()
     if not args.isolate or args.isolate in (".", "..") or "/" in args.isolate or "\\" in args.isolate:
@@ -290,7 +288,7 @@ def main():
     if not iso.is_dir():
         p.error("Isolate directory does not exist: " + str(iso))
     output = args.outdir or iso / "reports/hybas_research"
-    result = generate(iso, output, args.audit_reads)
+    result = generate(iso, output, args.audit_reads, args.trajectory_dir, args.validation_dir, args.audit_from)
     print("Report:", output / "hybas_report.html")
     print("Read audit:", result["status"])
 

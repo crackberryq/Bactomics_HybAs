@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a9 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a10 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -1201,6 +1201,9 @@ def enabled_envs():
     if PACBIO_SAMPLES: names.append("pacbio_assembly")
     if (SETUP_ONLY and POLISH_MODE == "tripolish" and RUN_POLYPOLISH) or any(needs_polypolish(i) for i in SAMPLES): names.append("polishing")
     if (SETUP_ONLY and POLISH_MODE in {"medaka", "tripolish"}) or any("medaka" in planned_stages(i) for i in SAMPLES): names.append("medaka")
+    if RUN_BUSCO and (any(planned_stages(i) for i in SAMPLES) or
+                      (SETUP_ONLY and polish_plan("hybrid", POLISH_MODE, RACON_ROUNDS, RUN_POLYPOLISH))):
+        names.append("polishing_validation")
     if RUN_PROKKA: names.append("annotation")
     if RUN_MULTIQC: names.append("multiqc")
     return names
@@ -1814,6 +1817,19 @@ rule capture_env_polishing_global:
         python -m pip freeze > "{output[3]}" || {{ partial=$(mktemp "{output[3]}.partial.XXXXXX"); mv "{output[3]}" "$partial"; : > "{output[3]}"; }}
         python -V > "{output[4]}" 2>&1
         """
+
+use rule capture_env_polishing_global as capture_env_polishing_validation_global with:
+    output:
+        env_conda_list_global("polishing_validation"),
+        env_export_global("polishing_validation"),
+        env_explicit_global("polishing_validation"),
+        env_pip_freeze_global("polishing_validation"),
+        env_python_version_global("polishing_validation")
+    conda: "workflow/envs/polishing_validation.yml"
+    message:
+        "Capturing polishing validation environment manifest"
+    benchmark:
+        os.path.join(provenance_runtime_dir(), "benchmarks", "capture_env_polishing_validation_global.tsv")
 
 rule capture_env_medaka_global:
     output:
@@ -4642,6 +4658,7 @@ rule polishing_trajectory:
         receipt=polish_execution("{isolate}"),
         assemblies=lambda wc: [stage_path(wc.isolate, s) for s in [base_stage(wc.isolate)] + planned_stages(wc.isolate)],
         dataset=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]), item["path"]) for item in busco_content_identity(ISO_OVERRIDES[wc.isolate]["busco_lineage"])["files"]],
+        theme=os.path.join(SOURCE_ROOT, "workflow/lib/report_theme.py"),
         script=os.path.join(SOURCE_ROOT, "workflow/scripts/polishing_trajectory.py")
     output:
         directory(trajectory_dir("{isolate}"))
@@ -4663,6 +4680,8 @@ rule polishing_validation:
         final=final_asm("{isolate}"),
         annotation=prokka_gff("{isolate}"),
         reads=[trim_r1("{isolate}"), trim_r2("{isolate}")],
+        theme=os.path.join(SOURCE_ROOT, "workflow/lib/report_theme.py"),
+        figures=os.path.join(SOURCE_ROOT, "workflow/scripts/polishing_validation_figures.py"),
         script=os.path.join(SOURCE_ROOT, "workflow/scripts/polishing_validation.py")
     output:
         directory(os.path.join(reports_dir("{isolate}"), "polishing_validation"))
@@ -4686,6 +4705,7 @@ rule research_report:
         illumina=[merged_r1("{isolate}"), merged_r2("{isolate}"), clean_r1("{isolate}"), clean_r2("{isolate}")],
         long_reads=lambda wc: [merged_pacbio(wc.isolate), clean_pacbio(wc.isolate)] if wc.isolate in PACBIO_SAMPLES else [merged_ont(wc.isolate), clean_ont_path(wc.isolate)],
         assignments=lambda wc: [os.path.join(kraken_dir(wc.isolate), x) for x in ["illumina.kraken2.txt", "illumina.report.txt", ("pacbio" if wc.isolate in PACBIO_SAMPLES else "nanopore") + ".kraken2.txt", ("pacbio" if wc.isolate in PACBIO_SAMPLES else "nanopore") + ".report.txt"]],
+        theme=os.path.join(SOURCE_ROOT, "workflow/lib/report_theme.py"),
         scripts=[os.path.join(SOURCE_ROOT, "workflow/scripts", x) for x in ["hybas_research_report.py", "aware_read_audit.py", "hybas_report_compat.py"]]
     output:
         directory(os.path.join(reports_dir("{isolate}"), "hybas_research"))
@@ -4701,6 +4721,7 @@ rule research_report:
 # Branded reporting reads finished outputs and never invokes analysis tools.
 rule hybas_report:
     input:
+        research=os.path.join(reports_dir("{isolate}"), "hybas_research"),
         summary=run_summary_json("{isolate}"),
         decision=kraken_decision_tsv("{isolate}"),
         qc=qc_assessment_tsv("{isolate}"),

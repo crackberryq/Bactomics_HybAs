@@ -27,7 +27,7 @@ def test_retained_stage_report(tmp_path, monkeypatch):
     (lineage/"dataset.cfg").write_text("name=test")
     out = iso/"reports/polishing_trajectory"
 
-    def run(cmd, check):
+    def run(cmd, check, cwd=None):
         if cmd[0] == "prodigal":
             faa = cmd[cmd.index("-a")+1]
             seq = "A" * (99 if faa.parent.name == "draft" else 100)
@@ -35,6 +35,7 @@ def test_retained_stage_report(tmp_path, monkeypatch):
             cmd[cmd.index("-o")+1].write_text("chr\tfixture\tCDS\t1\t4\t.\t+\t0\tID=a\n")
         elif cmd[0] == "busco":
             dest = cmd[cmd.index("--out_path")+1]
+            assert cwd == dest  # BUSCO creates its initial log in the working directory.
             table = dest/"busco/run_fixture/full_table.tsv"
             table.parent.mkdir(parents=True)
             table.write_text("a\tDuplicated\na\tDuplicated\nb\t"+("Fragmented" if dest.name=="draft" else "Complete")+"\n")
@@ -57,3 +58,9 @@ def test_retained_stage_report(tmp_path, monkeypatch):
     assert "b\tFragmented\tComplete" in (out/"marker_changes.tsv").read_text()
     assert not (out/"polypolish").exists()
     assert (out/"index.html").is_file()
+    edition = tmp_path / "edition" / "trajectory"
+    trajectory.render_saved(out, edition)
+    page = (edition / "index.html").read_text()
+    assert 'data-hybas-report="trajectory"' in page and "Substitutions" in page
+    assert "data:image/svg+xml;base64," in page and "draft → racon1" in page
+    assert set(p.name for p in edition.iterdir()) == {"index.html"}

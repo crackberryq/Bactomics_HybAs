@@ -1,3 +1,7 @@
+## 10.0.0a10 — Research reporting
+
+Shared research-report presentation, aligned polishing density tracks and a validation environment deployment probe.
+
 ## 10.0.0a9 — Final-coordinate polishing validation
 
 Measure stage-to-final divergence, projected edit windows, final annotation overlap and Illumina pileup evidence. Refresh a completed trajectory in place from its retained inputs.

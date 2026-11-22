@@ -1,13 +1,13 @@
 """Backfill final-coordinate evidence from retained stages without re-running polishing."""
 import argparse
 import base64
-import io
 import re
 import csv
 import fcntl
 import gzip
 import hashlib
 import html
+import io
 import json
 import os
 import shutil
@@ -18,7 +18,11 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from polishing_trajectory import fasta_lengths, write_table
-from hybas_research_report import STYLE
+from polishing_validation_figures import density_atlas, projections, spatial_context, complexity_plot
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'lib'))
+from report_theme import evidence_page
+from urllib.parse import quote
 
 WINDOW = 10000
 
@@ -117,6 +121,20 @@ def overlap_bp(intervals, lo, hi):
     return covered
 
 
+def site_clusters(sites):
+    """Bound seek/decompression overhead for nearby loci while limiting memory."""
+    positions = []
+    contig = None
+    for name,pos in sorted(sites):
+        if positions and (name!=contig or pos-positions[-1]>500 or pos-positions[0]>=32768):
+            yield contig,positions
+            positions = []
+        contig = name
+        positions.append(pos)
+    if positions:
+        yield contig,positions
+
+
 def read_support(root, final, iso, sites, threads):
     reads = [iso/"trimmed"/f"R{i}.trimmed.fq.gz" for i in (1,2)]
     fields = ["contig","position","reference_base","informative_bases","A","C","G","T","deletion_spans","anchored_indel_counts"]
@@ -146,9 +164,15 @@ def read_support(root, final, iso, sites, threads):
         pysam.index(str(bam))
         pysam.faidx(str(indexed))
         with pysam.FastaFile(str(indexed)) as fa, pysam.AlignmentFile(str(bam)) as align:
-            for contig, pos in sorted(sites):
-                counts, indels = Counter(), Counter()
-                for col in align.pileup(contig,pos-1,pos,truncate=True,stepper="samtools",min_mapping_quality=20,min_base_quality=20,max_depth=1000000):
+            for contig, positions in site_clusters(sites):
+                wanted = set(positions)
+                observed = {}
+                for col in align.pileup(contig,positions[0]-1,positions[-1],truncate=True,stepper="samtools",min_mapping_quality=20,min_base_quality=20,max_depth=1000000):
+                    pos = col.reference_pos + 1
+                    if pos not in wanted:
+                        continue
+                    counts, indels = Counter(), Counter()
+                    observed[pos] = counts, indels
                     for hit in col.pileups:
                         if hit.is_refskip:
                             continue
@@ -162,64 +186,13 @@ def read_support(root, final, iso, sites, threads):
                             indels["+"+seq[idx+1:idx+1+hit.indel]] += 1
                         elif hit.indel < 0:
                             indels["-"+fa.fetch(contig,pos,pos-hit.indel).upper()] += 1
-                vals = [counts[b] for b in "ACGT"]
-                rows.append(dict(zip(fields,[contig,pos,fa.fetch(contig,pos-1,pos).upper(),sum(vals),*vals,counts["del"],json.dumps(indels,sort_keys=True)])))
+                for pos in positions:
+                    counts, indels = observed.get(pos,(Counter(),Counter()))
+                    vals = [counts[b] for b in "ACGT"]
+                    rows.append(dict(zip(fields,[contig,pos,fa.fetch(contig,pos-1,pos).upper(),sum(vals),*vals,counts["del"],json.dumps(indels,sort_keys=True)])))
         status = "Final-reference Illumina pileup, mapping and base quality ≥20"
     write_table(root/"site_support.tsv",rows,fields)
     return status
-
-
-def figures(stages, windows):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    def embed(fig, label):
-        buf = io.BytesIO()
-        fig.savefig(buf,format="png",dpi=125,bbox_inches="tight")
-        plt.close(fig)
-        image = base64.b64encode(buf.getvalue()).decode("ascii")
-        return f'<img style="width:100%;height:auto" alt="{label}" src="data:image/png;base64,{image}">'
-
-    names = [s["stage"] for s in stages]
-    x = list(range(1,len(names)+1))
-    short = [float(s["short_pct"]) for s in stages]
-    mean = [float(s["mean_aa"]) for s in stages]
-    complete = [float(s["complete_pct"]) for s in stages]
-    fig = plt.figure(figsize=(10,7))
-    fig.subplots_adjust(wspace=.34,hspace=.56)
-    ax = fig.add_subplot(221,projection="3d")
-    ax.plot(x,short,mean,color="#136d68")
-    ax.scatter(x,short,mean,color="#136d68")
-    ax.set(xlabel="Stage",ylabel="Short (%)",zlabel="Mean (aa)",title="Oblique trajectory")
-    for panel,xx,yy,title,xlabel,ylabel in [
-        (222,x,short,"Top view","Stage","Proteins under 100 aa (%)"),
-        (223,x,mean,"Front view","Stage","Mean protein length (aa)"),
-        (224,short,mean,"Side view","Proteins under 100 aa (%)","Mean protein length (aa)")]:
-        ax = fig.add_subplot(panel)
-        ax.plot(xx,yy,"o-",color="#136d68")
-        ax.set(xlabel=xlabel,ylabel=ylabel,title=title)
-        if panel!=224:
-            ax.set_xticks(x)
-        ax.grid(alpha=.2)
-    view = embed(fig,"Oblique, top, front and side views of the polishing trajectory")
-    view += "<p>" + " → ".join(f"{i}. {html.escape(name)}" for i,name in zip(x,names)) + "</p>"
-    fig, ax = plt.subplots(figsize=(9,2.8),layout="constrained")
-    ax.plot(x,complete,"o-",color="#136d68")
-    ax.set_xticks(x,names)
-    ax.set_ylabel("Complete BUSCO (%)")
-    ax.grid(axis="y",alpha=.2)
-    view += embed(fig,"BUSCO completeness by stage")
-    contigs = {}
-    for w in windows:
-        contigs.setdefault(w["contig"],[]).append(w)
-    fig,ax = plt.subplots(figsize=(9,3),layout="constrained")
-    offset = 0
-    for contig,rows in contigs.items():
-        ax.plot([(offset+w["start"]-1)/1e6 for w in rows],[w["edit_bases"] for w in rows],lw=1)
-        offset += rows[-1]["end"]
-    ax.set(xlabel="Position along concatenated final contigs (Mb)",ylabel="Edited bases per window")
-    return view,embed(fig,"Projected edit burden by 10 kb final-reference window")
 
 
 def run(iso, root, threads):
@@ -285,22 +258,150 @@ def run(iso, root, threads):
                 hotspot_rule="Top 20 nonempty windows by affected base count; ties by contig then start; 1-based inclusive",
                 annotation=gff_status,annotation_counts=counts,site_support=support)
     (root/"validation.json").write_text(json.dumps(meta,indent=2))
-    def table(rows):
-        if not rows:
-            return "<p>No observations.</p>"
-        return "<table><tr>"+ "".join("<th>"+html.escape(k.replace("_"," "))+"</th>" for k in rows[0])+"</tr>"+ "".join("<tr>"+ "".join("<td>"+html.escape(str(v))+"</td>" for v in r.values())+"</tr>" for r in rows)+"</table>"
-    views,density = figures(stages,windows)
-    body = ("<h2>Polishing validation</h2><div class='panel'><h3>Each retained stage compared with the final assembly</h3>"+views+table(direct)+
-            "<p>Differences cover one-to-one aligned sequence. Stage-only and final-only columns count bases. Individual alignment reports record unaligned sequence.</p>"+
-            f"<h3>Spatial edit density</h3><p>{meta['projected']:,} adjacent-stage edit bases projected to the final assembly. {meta['unresolved']:,} unresolved bases were excluded. Windows span 10 kb, with a shorter terminal window per contig.</p>"+density+
-            "<h3>Highest-burden windows</h3>"+table(hotspots)+
-            "<p>Overlap counts rRNA bases inside each window. It does not count individual edits in rRNA.</p><p>"+html.escape(gff_status)+". "+
-            html.escape(", ".join(f"{k}: {v}" for k,v in sorted(counts.items()) if k in ("rRNA","tRNA","CDS")))+
-            ".</p><h3>Site-level read evidence</h3><p>"+html.escape(support)+". The site table records A/C/G/T observations, deletion spans and anchored indels. Sites falling outside unique alignments have no final-coordinate support estimate.</p></div>")
-    (root/"summary.html").write_text(body)
-    files = ["stage_to_final.tsv","projected_edits.tsv","windows.tsv","hotspots.tsv","site_support.tsv","validation.json"]
-    links = " · ".join(f'<a href="{name}">{name}</a>' for name in files)
-    (root/"index.html").write_text('<meta charset="utf-8"><title>HybAs polishing validation</title><style>'+STYLE+'</style><main>'+body+'<p>'+links+'</p></main>')
+    render(iso, root, root)
+
+
+def table(rows):
+    if not rows:
+        return "<p>No observations.</p>"
+    headers = "".join(f"<th>{html.escape(k.replace('_',' '))}</th>" for k in rows[0])
+    values = "".join("<tr>" + "".join(f'<td>{html.escape(str(v)) if v != "" else "—"}</td>' for v in row.values()) + "</tr>" for row in rows)
+    return f'<div class="table-wrap"><table><thead><tr>{headers}</tr></thead><tbody>{values}</tbody></table></div>'
+
+
+def atomic_write(path, content):
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False, encoding="utf-8") as out:
+        out.write(content)
+    os.replace(out.name,path)
+
+
+def refresh_section(original, fragment, target):
+    """Replace the exact validation layouts emitted by the a9 and current writers."""
+    if "</main>" not in original:
+        raise ValueError("Missing research report main section")
+    start = "<!-- HybAs final-coordinate validation -->"
+    end = "<!-- End HybAs final-coordinate validation -->"
+    section = (start + '<section id="polishing-validation">' + fragment +
+               f'<p><a href="{html.escape(target,quote=True)}">Open polishing validation and evidence tables</a></p></section>' + end)
+    inserted = False
+
+    def replace(match):
+        nonlocal inserted
+        if inserted:
+            return ""
+        inserted = True
+        return section
+
+    # Use one pass: a9 could contain both its original inline summary and the backfill.
+    old_inline = (r'(?:<section id="polish-overview">)?<h2>Polishing validation</h2>'
+                  r'(?:(?!</main>|<!-- HybAs final-coordinate validation -->).)*?'
+                  r'<p><a href="\.\./polishing_validation/index\.html">Download polishing validation tables</a></p>')
+    marked = (re.escape(start) + r'(?:(?!' + re.escape(start) + r').)*?(?:'
+              r'</section>\s*<!-- [Ee]nd HybAs final-coordinate validation -->|'
+              r'>Validation evidence tables</a></section>(?:\s*<!-- [Ee]nd HybAs final-coordinate validation -->)?)')
+    link_only = (r'<section id="polishing-validation"><h2>Polishing validation</h2><p>'
+                 r'<a href="[^"]+">Open polishing validation</a></p></section>')
+    pattern = re.compile(marked + "|" + old_inline + "|" + link_only, re.DOTALL)
+    updated = pattern.sub(replace, original)
+    # Detect a broken marked section before touching the report on disk.
+    if updated.count(start) != int(inserted):
+        raise ValueError("Incomplete polishing validation section")
+    return updated if inserted else updated.replace("</main>",section+"</main>",1)
+
+
+def render(iso, tables, dest):
+    """Render measured tables without invoking native tools or reading raw libraries."""
+    traj = iso / "reports/polishing_trajectory"
+    stages = records(traj/"stages.tsv")
+    meta = json.loads((tables/"validation.json").read_text())
+    direct = records(tables/"stage_to_final.tsv")
+    names = [row["stage"] for row in stages]
+    if not names or names != [row["stage"] for row in direct] or meta["stages"] != {r["stage"]:r["sha256"] for r in stages}:
+        raise ValueError("Validation and trajectory stage identities differ")
+    final_data = (iso/"work/final/assembly.final.fasta").read_bytes()
+    if hashlib.sha256(final_data).hexdigest()!=meta["final_sha256"]:
+        raise ValueError("Validation final FASTA checksum differs from retained final assembly")
+    reference = sequences(io.StringIO(final_data.decode("utf-8")))
+    windows = records(tables/"windows.tsv")
+    edits = records(tables/"projected_edits.tsv")
+    if sum(int(w["edit_bases"]) for w in windows) != meta["projected"] or sum(r["status"]=="mapped" for r in edits) != meta["projected"] or len(edits)!=meta["projected"]+meta["unresolved"]:
+        raise ValueError("Inconsistent projected edit and window totals")
+    hotspots = records(tables/"hotspots.tsv")
+    observed = {(r["final_contig"],int(r["final_pos"])) for r in edits if r["status"]=="mapped"}
+    support = records(tables/"site_support.tsv")
+    pairs = [before+"-to-"+after for before,after in zip(names,names[1:])]
+    complexity, dispersion, motifs, context = spatial_context(reference, windows, hotspots, edits, support, pairs, int(meta["window_bp"]))
+    counts = [int(r["informative_bases"]) for r in support if (r["contig"],int(r["position"])) in observed]
+    summary = [
+        ("Complete BUSCO at final measured stage",f'{float(stages[-1]["complete_pct"]):.2f}%'),
+        ("Projected edited bases",f'{meta["projected"]:,}'),
+        ("Excluded from spatial plot",f'{meta["unresolved"]:,}'),
+        ("Positions with A/C/G/T observations",f'{sum(v>0 for v in counts):,} of {len(counts):,}' if counts else "Unavailable"),
+    ]
+    cards = "".join(f'<div class="stat"><small>{label}</small><strong>{value}</strong></div>' for label,value in summary)
+    body = '<section id="polish-overview"><h2>Polishing validation</h2><div class="grid">'+cards+'</div></section>'
+    body += ('<section id="edit-density-atlas"><h3>Where did polishing change the assembly?</h3><div class="panel">'
+             f'<p>The top track counts projected edited bases from all transitions in {int(meta["window_bp"]):,} bp windows. Teal blocks mark windows overlapping rRNA. '
+             'Follow a peak down to the transition rows to identify the contributing polishing steps. Repeated edits across steps contribute repeatedly to window totals.</p>'
+             + density_atlas(windows, edits, stages) + '</div></section>')
+    body += ('<section id="polish-context"><h3>How are edits distributed across sequence contexts?</h3><div class="panel">'
+             '<h4>Window complexity and edit burden</h4>' + complexity_plot(complexity) +
+             '<p>Each point represents a full window, including windows with zero edits. Entropy measures diversity among overlapping A/C/G/T triplets on the recorded forward strand. '
+             'Windows without valid triplets have no entropy estimate. The spatial atlas and downloadable window table retain shorter terminal windows.</p>'
+             '<details><summary>Spatial dispersion by polishing step</summary>' + table(dispersion) +
+             '<p>The sample variance divided by the mean describes variation in edit counts among full windows. A value above one indicates greater variation than an equal-mean Poisson model. '
+             'The ratio requires at least two full windows and a positive mean.</p></details>'
+             '<details><summary>Hotspot coordinates, RNA overlap and read depth</summary>' + table(context) +
+             '<p>Hotspots are ranked by projected edited bases. RNA overlap counts the union of annotated rRNA bases within each window. '
+             'Depth summarizes passing A/C/G/T observations at distinct projected edit positions. A dash denotes unavailable depth. Repeat-family classifications require independent repeat annotations.</p></details>')
+    best = {}
+    for motif in motifs:
+        rank = motif["rank"]
+        if rank not in best or motif["frequency_ratio"] > best[rank]["frequency_ratio"]:
+            best[rank] = motif
+    body += ('<details><summary>Sequence motifs in hotspots</summary>'
+             + (table([{k:r[k] for k in ("rank","motif","window_count","background_count","frequency_ratio")} for r in best.values()]) if best else '<p>No enriched triplets with measurable background.</p>')
+             + '<p>The strongest frequency ratio for each ranked window is shown. The denominator pools all windows outside the ranked hotspots, including partial windows. '
+             'Counts exclude ambiguous triplets and apply a half-count per possible triplet to the frequency estimate. Ratios describe composition. '
+             'The export includes every observed triplet with a ratio above one.</p></details></div></section>')
+    body += ('<section id="polish-outcomes"><h3>How did each stage differ from the final sequence?</h3><div class="panel">'
+             + table(direct) + '<p>Stage-only and final-only columns count bases in one-to-one alignments. Substitutions count aligned mismatches.</p>'
+             '<details><summary>Polishing trajectory projections</summary>'+projections(stages))
+    oblique = traj/"trajectory.svg"
+    if oblique.is_file() and oblique.stat().st_size < 2_000_000:
+        data = base64.b64encode(oblique.read_bytes()).decode()
+        body += f'<img style="max-width:720px;width:100%" alt="Oblique trajectory coloured by complete BUSCO percentage" src="data:image/svg+xml;base64,{data}">'
+    body += '</details></div></section>'
+    annotations = meta.get("annotation_counts",{})
+    body += '<section id="polish-support"><h3>What evidence supports these changes?</h3><div class="panel"><p>'+html.escape(meta["site_support"])+'.</p>'
+    if counts:
+        body += (f'<p>{sum(v>0 for v in counts):,} of {len(counts):,} measured edit positions have at least one passing A/C/G/T observation. '
+                 'Inspect base counts and anchored indels in the site table to assess an individual locus. Reads used during polishing also contribute here.</p>')
+    body += '<p>'+html.escape(meta["annotation"])+'.</p>'
+    if annotations:
+        body += table([{k:annotations.get(k,0) for k in ("CDS","tRNA","rRNA")}])
+    body += '</div></section>'
+    files = {"Stage-to-final differences":"stage_to_final.tsv", "Projected edit positions":"projected_edits.tsv", "All windows":"windows.tsv",
+             "Ranked hotspots":"hotspots.tsv", "Read observations by site":"site_support.tsv", "Measurement provenance":"validation.json"}
+    links = "".join(f'<li><a href="{quote(os.path.relpath(tables/path,dest))}">{label}</a></li>' for label,path in files.items())
+    dest.mkdir(parents=True,exist_ok=True)
+    derived = (
+        ("window_complexity.tsv",complexity,("contig","start","end","full_window","edit_bases","valid_triplets","entropy_bits")),
+        ("dispersion.tsv",dispersion,("comparison","full_windows","mean_edit_bases","variance_to_mean")),
+        ("hotspot_motifs.tsv",motifs,("rank","contig","start","motif","window_count","window_valid_triplets","background_count","background_valid_triplets","frequency_ratio")),
+        ("hotspot_context.tsv",context,("rank","contig","start","end","edit_bases","rRNA_overlap_bp","annotation_context","observed_edit_sites","mean_informative_depth","minimum_informative_depth")),
+    )
+    for filename, rows, fields in derived:
+        out = io.StringIO()
+        writer = csv.DictWriter(out,fieldnames=fields,delimiter="\t",lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+        atomic_write(dest/filename,out.getvalue())
+        links += f'<li><a href="{filename}">{filename}</a></li>'
+    document = evidence_page("Polishing validation",iso.name,body+'<section id="validation-evidence"><h2>Evidence files</h2><ul class="evidence-links">'+links+'</ul></section>',
+                             [("polish-overview","Overview"),("edit-density-atlas","Edit distribution"),("polish-context","Spatial context"),("polish-outcomes","Stage effects"),("polish-support","Read and RNA evidence"),("validation-evidence","Evidence files")], report_type="validation")
+    atomic_write(dest/"summary.html",body)
+    atomic_write(dest/"index.html",document)
 
 
 if __name__ == "__main__":
@@ -308,30 +409,36 @@ if __name__ == "__main__":
     parser.add_argument("--isolate-dir",type=Path,required=True)
     parser.add_argument("--threads",type=int,default=4)
     parser.add_argument("--out",type=Path)
+    parser.add_argument("--render-only",action="store_true",help="Render retained validation tables without running analysis")
+    parser.add_argument("--tables",type=Path,help="Location of retained validation tables for rendering")
     parser.add_argument("--refresh-report",action="store_true")
     args=parser.parse_args()
     iso=args.isolate_dir.resolve()
     dest=args.out or iso/"reports/polishing_validation"
     if args.threads<1:
         parser.error("threads must be positive")
+    dest = dest.resolve()
+    if args.tables and not args.render_only:
+        parser.error("--tables requires --render-only")
+    dest.parent.mkdir(parents=True,exist_ok=True)
     with (dest.parent/".polishing-validation.lock").open("a") as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
-        if not (dest/"index.html").is_file():
+        if args.render_only:
+            tables = (args.tables or iso/"reports/polishing_validation").resolve()
+            render(iso,tables,dest)
+        elif not (dest/"index.html").is_file():
             work=Path(tempfile.mkdtemp(dir=dest.parent,prefix="validation-attempt-"))
             run(iso,work,args.threads)
             work.rename(dest)
+        else:
+            render(iso,dest,dest)
         print(dest/"index.html")
 
         if args.refresh_report:
             page = iso/"reports/hybas_research/hybas_report.html"
             if page.is_file():
                 original = page.read_text()
-                marker = "<!-- HybAs final-coordinate validation -->"
-                if marker not in original:
-                    if "</main>" not in original:
-                        raise ValueError(f"Unexpected research report layout: {page}")
-                    section = marker + '<section id="polishing-validation">' + (dest/"summary.html").read_text() + '<a href="../polishing_validation/index.html">Validation evidence tables</a></section>'
-                    with tempfile.NamedTemporaryFile(mode="w",dir=page.parent,delete=False) as out:
-                        out.write(original.replace("</main>",section+"</main>",1))
-                    os.replace(out.name,page)
+                target = quote(os.path.relpath(dest/"index.html",page.parent))
+                updated = refresh_section(original,(dest/"summary.html").read_text(),target)
+                atomic_write(page,updated)
                 print(page)

@@ -3,6 +3,7 @@ import csv
 import html
 import json
 from pathlib import Path
+from report_theme import evidence_page
 
 
 def decisions(path, isolate):
@@ -29,9 +30,7 @@ def render(document):
     primary = next((g for g in document['groups'] if g['id']=='primary'), {})
     selected = actual.get('selected_target_taxid')
     selected_name = actual.get('selected_target_name')
-    body = '<header><p class="brand">Powered by GenoMix Human Link</p><h1>HybAs 10 — Experimental · AWARE+</h1><p>'+esc(document['isolate'])+' · AWARE stage complete</p></header>'
-    body += '<nav aria-label="Report sections"><a href="#target">Target & filtering</a><a href="#groups">Retained groups</a><a href="#statistics">Statistical evidence</a><a href="#next">Next steps</a></nav>'
-    body += '<p class="notice">This report records the completed AWARE stage. It does not establish that assembly or downstream analysis completed. Check the saved run status in Bactologix.</p>'
+    body = '<p class="warn">This report records the completed AWARE stage. It does not establish that assembly or downstream analysis completed. Check the saved run status in Bactologix.</p>'
     body += '<section id="target"><h2>Selected target and actual filtering</h2>'
     body += table(['Evidence','Value'], [
         ['AWARE+ mode',actual.get('aware_mode', 'legacy')],
@@ -67,4 +66,5 @@ def render(document):
     body += '</section><section id="next"><h2>Next steps</h2><ol><li>Open AWARE outputs in Bactologix to select eligible groups and register derived samples.</li><li>Create separate run drafts for those samples. Their retained libraries determine the route; reclassification is optional.</li><li>For a parent stopped after AWARE, use Continue to assembly. The app checks saved evidence and required environments first.</li></ol><p>To move outputs to another workstation, copy this entire AWARE folder and import its manifest.json.</p><p><a href="manifest.json">Bundle manifest</a> · <a href="filtering.tsv">Recorded filtering decisions</a>'
     if stats:body+=' · <a href="statistics.json">Statistical evidence JSON</a>'
     body += '</p></section>'
-    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HybAs AWARE · '+esc(document['isolate'])+'</title><style>body{font:16px/1.55 system-ui,sans-serif;color:#183b32;background:#f4f8f6;max-width:1180px;margin:auto;padding:24px}header{background:#124e40;color:white;padding:24px;border-radius:14px}.brand{font-size:.9rem}h1{margin:.2em 0}section{background:white;padding:24px;margin:20px 0;border:1px solid #d6e4dd;border-radius:12px;min-width:0}nav{display:flex;flex-wrap:wrap;gap:18px;padding:20px 0}a{color:#11634e}table{width:100%;border-collapse:collapse}th,td{padding:12px;text-align:left;border-bottom:1px solid #d6e4dd;vertical-align:top;overflow-wrap:anywhere}th{background:#eaf3ee}.scroll{overflow-x:auto}details{margin:18px 0}summary{cursor:pointer;font-weight:600}.notice{border-left:4px solid #31816b;padding:12px}p,li{overflow-wrap:anywhere}@media(max-width:600px){body{padding:12px}section,header{padding:16px}th,td{padding:9px;min-width:100px}}@media print{body{background:white;padding:0}section{break-inside:avoid}.scroll{overflow:visible}nav{display:none}}</style></head><body>'+body+'</body></html>'
+    return evidence_page("AWARE target and filtering", document["isolate"] + " · AWARE stage complete", body,
+                         [("target","Target and filtering"),("groups","Retained groups"),("statistics","Statistical evidence"),("next","Next steps")])

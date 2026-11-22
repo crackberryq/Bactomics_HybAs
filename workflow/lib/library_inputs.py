@@ -13,6 +13,7 @@ import html
 from itertools import zip_longest
 import json
 from pathlib import Path
+from report_theme import evidence_page
 import re
 import shutil
 import subprocess
@@ -155,15 +156,17 @@ def preprocess_library(lib, inputs, outdir, threads):
         details = {'preprocessing': method, 'nxtrim_read_counts': category_counts,
                    'unknown_handling': 'unpaired_evidence', 'polishing_eligible': False}
         write_json(json_path, details)
-        html_path.write_text('<!doctype html><h1>Nextera mate-pair preprocessing</h1><pre>' +
-                             html.escape(json.dumps(details, indent=2)) + '</pre>')
+        counts_html = ''.join(f"<tr><td>{html.escape(str(k))}</td><td>{v:,}</td></tr>" for k,v in category_counts.items())
+        body = ('<section class="panel"><h2>Retained reads</h2><table><tr><th>NxTrim category</th><th>Reads</th></tr>' +
+                counts_html + '</table><p>Unknown pairs are retained as unpaired evidence.</p></section>')
+        html_path.write_text(evidence_page("Nextera mate-pair preprocessing", name, body))
         return datasets, [], details, html_path, sum(category_counts[c] for c in ('mp', 'pe', 'unknown')) // 2
     if method == 'pretrimmed':
         for src, dst in zip(inputs, (left, right)):
             shutil.copyfile(src, dst)
         details = {'preprocessing': method, 'fastp': 'not_run', 'quality_encoding': 'phred33'}
         write_json(json_path, details)
-        html_path.write_text('<!doctype html><h1>Pretrimmed input</h1><p>Declared type and orientation preserved; no additional adapter trimming.</p>')
+        html_path.write_text(evidence_page("Pretrimmed input", name, '<section class="panel"><p>The workflow preserved the declared library type and orientation and used the supplied trimmed reads.</p></section>'))
     else:
         subprocess.run(['fastp', '-i', str(inputs[0]), '-I', str(inputs[1]),
                         '-o', str(left), '-O', str(right), '--thread', str(threads),
@@ -251,9 +254,10 @@ def trim(plan, r1, r2, outdir, combined1, combined2, report_html, report_json, t
                       f"{report['cleaned_pairs']} cleaned pairs, {report['trimmed_pairs']} trimmed pairs</summary>"
                       f"<iframe title=\"fastp report\" style=\"width:100%;height:800px\" "
                       f"srcdoc=\"{html.escape(Path(report['html_path']).read_text(), quote=True)}\"></iframe></details>")
-    Path(report_html).write_text("<!doctype html><meta charset=\"utf-8\"><title>Library trimming</title>"
-                                "<h1>Illumina library trimming</h1><p>Separate library preprocessing reports; "
-                                "rates are not pooled across libraries.</p>" + "".join(panels))
+    body = ('<section class="panel" id="libraries"><h2>Preprocessing by library</h2>'
+            '<p>Expand a library to inspect its retained pairs and preprocessing report.</p>' + "".join(panels) + '</section>')
+    Path(report_html).write_text(evidence_page("Illumina library trimming", "Paired-read preprocessing", body, [("libraries","Libraries")]))
+
 
 
 def promote(source, dest, minimum):

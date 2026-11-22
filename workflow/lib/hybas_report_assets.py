@@ -2,7 +2,7 @@
 CSS = r"""
 :root {
   color-scheme: light;
-  --navy: #101f33;
+  --navy: #112d35;
   --navy-light: #1d334e;
   --ink: #1b2d40;
   --muted: #5e6c79;

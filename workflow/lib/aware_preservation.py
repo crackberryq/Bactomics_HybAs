@@ -11,6 +11,7 @@ import html
 import itertools
 import json
 from pathlib import Path
+from report_theme import evidence_page
 import platform as runtime_platform
 import re
 import resource
@@ -313,14 +314,12 @@ def _preserve(review, destination, writer_limit):
     rows = ''.join('<tr><td>' + html.escape(b['name']) + '</td><td>' + str(b['taxid'] or '—') +
                    '</td><td>' + str(b['units'].get('illumina', 0)) + '</td><td>' + str(sum(b['units'].get(p, 0) for p in ('ont', 'pacbio'))) + '</td></tr>'
                    for b in document['bins'])
-    (destination / 'report.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1"><title>AWARE preservation</title>'
-        '<style>body{font:16px system-ui;max-width:1100px;margin:2rem auto;padding:1rem;color:#18372b}th,td{padding:.6rem;border-bottom:1px solid #ccc;text-align:left}.scroll{overflow:auto}table{width:100%;border-collapse:collapse}</style>'
-        '<h1>AWARE · Extended read preservation</h1><p>Experimental · ' + html.escape(sample) + '</p><p>' + LIMITATION + '</p>'
+    body = ('<section id="groups" class="panel"><h2>Retained read groups</h2><p>' + LIMITATION + '</p>'
         '<p>Every input read or pair is retained in exactly one group. Shared candidates are recorded in '
         'assignments.tsv.gz; reads are not copied into multiple species groups. Empty groups have no FASTQ file.</p>'
         '<div class="scroll"><table><tr><th>Group</th><th>TaxID</th><th>Illumina pairs</th><th>Long reads</th></tr>' + rows +
-        '</table></div><p><a href="manifest.json">Manifest and computational metrics</a> · <a href="assignments.tsv.gz">Assignment ledger</a></p></html>')
+        '</table></div><p><a href="manifest.json">Manifest and computational metrics</a> · <a href="assignments.tsv.gz">Assignment ledger</a></p></section>')
+    (destination / 'report.html').write_text(evidence_page('Extended read preservation', sample + ' · Experimental', body, [('groups','Retained read groups')]), encoding='utf8')
     return document
 
 

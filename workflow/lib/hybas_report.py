@@ -5,6 +5,8 @@ import html
 import io
 import json
 import math
+import os
+from urllib.parse import quote
 from datetime import datetime, timezone
 from pathlib import Path
 from hybas_report_assets import CSS
@@ -137,7 +139,7 @@ def methods_text(bundle):
             "This draft describes the saved run; review it alongside the recorded configuration and tool versions before publication.")
 
 
-def render_report(data):
+def render_report(data, report_links=()):
     b=normalize(data);s=b['summary'];ts=b.get('tables',{});decisions=keyvalues(ts.get('kraken_decision',[]))
     methods=methods_text(b)
     def stat(label,value,note=''):
@@ -180,7 +182,10 @@ def render_report(data):
     skipped=s.get('skipped_stages',{});skipped=skipped if isinstance(skipped,dict) else {}
     stages=[dict(stage=s.get('assembler') or 'unicycler',status='Recorded assembly source',reason='')]+[dict(stage=x,status='Executed',reason='') for x in executed]+[dict(stage=x,status='Skipped',reason=reason) for x,reason in skipped.items()]
     assembly=panel('Recorded assembly route','<div class="stage-route">'+''.join('<span class="badge '+('ok' if row['status']=='Executed' else 'neutral')+'">'+e(row['stage'])+' · '+e(row['status'])+'</span>' for row in stages)+'</div>'+pairs([('Requested polishing',s.get('requested_polish_mode',s.get('polish_mode_requested'))),('Final source',s.get('final_source_stage')),('Final source SHA-256',s.get('final_source_sha256'))])+detail('Stage details',table(stages,['stage','status','reason'])))
-    assembly+=panel('Final assembly metrics',table([{'metric':label,'value':s.get(key)} for label,key in [('Length (bp)','quast_total_length'),('Largest contig (bp)','quast_largest_contig'),('N50 (bp)','quast_n50'),('L50','quast_l50'),('GC (%)','quast_gc_percent')]],['metric','value'])+'<p class="small muted">Stage-by-stage quality measurements were not captured in this summary; no improvement is inferred from a stage having run.</p>')
+    assembly+=panel('Final assembly metrics',table([{'metric':label,'value':s.get(key)} for label,key in [('Length (bp)','quast_total_length'),('Largest contig (bp)','quast_largest_contig'),('N50 (bp)','quast_n50'),('L50','quast_l50'),('GC (%)','quast_gc_percent')]],['metric','value'])+'<p class="small muted">These measurements describe the final assembly. The research report compares retained stages when polishing evidence is available.</p>')
+    if report_links:
+        related = ''.join(f'<li><a href="{e(url)}">{e(title)}</a></li>' for title,url in report_links)
+        assembly += panel('Polishing evidence', '<ul>'+related+'</ul>')
     quality=panel('BUSCO',('<p>Disabled in the recorded configuration.</p>' if s.get('run_busco') is False else '<p>Lineage: '+show(s.get('busco_lineage'))+'</p>'+bars([(label,s.get('busco_'+key+'_percent')) for label,key in [('Single copy','single_copy'),('Duplicated','duplicated'),('Fragmented','fragmented'),('Missing','missing')]],'%')))
     quality+=panel('Coverage',('<p>PacBio mapped coverage is not recorded in this evidence bundle.</p>' if long_prefix=='pacbio' else pairs([('Estimated ONT coverage (×)',s.get('estimated_ont_coverage_x')),('Recorded ONT bases',s.get('coverage_ont_bp')),('Assembly bases used',s.get('coverage_assembly_bp'))]))+'<p class="small muted">This is the saved base-count estimate, not a per-position mapped-depth distribution.</p>')
     quality+=panel('Analytical suitability', '<p><strong>Not assessed against validated use-specific acceptance criteria.</strong> '
@@ -220,7 +225,7 @@ def render_report(data):
     methodology+=detail('Report evidence provenance',pairs([('Schema',b['schema_version']),('Captured',b.get('captured_at')),('Analysis timestamp',s.get('timestamp'))])+table([dict(path=k,sha256=v) for k,v in b.get('sources_sha256',{}).items()],['path','sha256']))
     blocks=[('overview','Assembly overview',overview),('reads','Reads & cleaning',reads),('aware','AWARE decisions',aware),('assembly','Assembly & polishing',assembly),('quality','Genome quality',quality),('annotation','Annotation & handoff',annotation_html),('outputs','Detailed outputs',outputs),('methods','Methods & provenance',methodology)]
     encoded=json.dumps(b,ensure_ascii=False).replace('<',r'\u003c').replace('>',r'\u003e').replace('&',r'\u0026')
-    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HybAs AWARE · '+e(s.get('isolate','Sample'))+'</title><style>'+CSS+'''\n.metric-bars{display:grid;gap:18px;margin:24px 0}.metric-row{display:grid;grid-template-columns:110px 1fr 120px;gap:12px;align-items:center;font-size:12px}.metric-row strong{text-align:right}.metric-track{height:12px;background:#e8edf1;border-radius:6px;overflow:hidden}.metric-track span{display:block;height:100%;background:#087c78;border-radius:6px}.stage-route{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}.kv dd{overflow-wrap:anywhere}.main{padding-top:25px}.hero{display:block}.section>p{margin-bottom:18px}@media(max-width:740px){.metric-row{grid-template-columns:90px 1fr;gap:8px}.metric-row strong{grid-column:2;text-align:left}.main{padding-top:17px}}\n</style></head><body><a class="skip-link" href="#overview">Skip to report</a><div class="app"><aside class="sidebar"><a class="brand" href="#overview"><span>HybAs<small>AWARE · BACTOMICS</small></span></a><p class="nav-label">Assembly report</p><nav aria-label="Report sections">'''+''.join('<a class="nav-link" href="#'+ident+'">'+e(title)+'</a>' for ident,title,_ in blocks)+'''</nav><div class="sidebar-foot">Offline report · saved run evidence</div></aside><main class="main"><header class="hero"><p class="eyebrow">BACTOMICS / HYBAS AWARE</p><h1>'''+e(s.get('isolate','Sample'))+'</h1><p class="hero-description">HybAs 10 — Experimental. Input modes, polishing and AWARE+ require validation.</p><div class="hero-meta"><span>Mode: '+show(s.get('run_mode'))+'</span><span>Analysis: '+show(s.get('workflow_version'))+'</span><span>Renderer: '+RENDERER_VERSION+'</span></div></header>'+''.join(section(*block) for block in blocks)+'''<footer>Recorded measurements and decisions · unavailable evidence is not a passing result.</footer><script type="application/json" id="report-data">'''+encoded+'''</script><script>
+    return '<!doctype html><html lang="en" data-hybas-report="hybas"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HybAs AWARE · '+e(s.get('isolate','Sample'))+'</title><style>'+CSS+'''\n.metric-bars{display:grid;gap:18px;margin:24px 0}.metric-row{display:grid;grid-template-columns:110px 1fr 120px;gap:12px;align-items:center;font-size:12px}.metric-row strong{text-align:right}.metric-track{height:12px;background:#e8edf1;border-radius:6px;overflow:hidden}.metric-track span{display:block;height:100%;background:#087c78;border-radius:6px}.stage-route{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}.kv dd{overflow-wrap:anywhere}.main{padding-top:25px}.hero{display:block}.section>p{margin-bottom:18px}@media(max-width:740px){.metric-row{grid-template-columns:90px 1fr;gap:8px}.metric-row strong{grid-column:2;text-align:left}.main{padding-top:17px}}\n</style></head><body><a class="skip-link" href="#overview">Skip to report</a><div class="app"><aside class="sidebar"><a class="brand" href="#overview"><span>HybAs<small>AWARE · BACTOMICS</small></span></a><p class="nav-label">Assembly report</p><nav aria-label="Report sections">'''+''.join('<a class="nav-link" href="#'+ident+'">'+e(title)+'</a>' for ident,title,_ in blocks)+'''</nav><div class="sidebar-foot">Offline report · saved run evidence</div></aside><main class="main"><header class="hero"><p class="eyebrow">BACTOMICS / HYBAS AWARE</p><h1>'''+e(s.get('isolate','Sample'))+'</h1><p class="hero-description">HybAs 10 — Experimental. Input modes, polishing and AWARE+ require validation.</p><div class="hero-meta"><span>Mode: '+show(s.get('run_mode'))+'</span><span>Analysis: '+show(s.get('workflow_version'))+'</span><span>Renderer: '+RENDERER_VERSION+'</span></div></header>'+''.join(section(*block) for block in blocks)+'''<footer>Recorded measurements and decisions · unavailable evidence is not a passing result.</footer><script type="application/json" id="report-data">'''+encoded+'''</script><script>
 const data=JSON.parse(document.getElementById('report-data').textContent);
 function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 document.getElementById('download-json').onclick=()=>download('hybas-report-evidence.json',JSON.stringify(data,null,2),'application/json');
@@ -232,5 +237,10 @@ document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>{document.querySelec
 def write_report(root, output):
     bundle=collect(root);out=Path(output);out.mkdir(parents=True,exist_ok=True)
     (out/'results.json').write_text(json.dumps(bundle,indent=2)+'\n',encoding='utf-8')
-    (out/'report.html').write_text(render_report(bundle),encoding='utf-8')
+    reports = Path(root) / "reports"
+    link_targets = [("Research report", reports / "hybas_research/hybas_report.html"),
+                    ("Stage trajectory", reports / "polishing_trajectory/index.html"),
+                    ("Edit density and polishing validation", reports / "polishing_validation/index.html")]
+    report_links = [(title, quote(os.path.relpath(path, out))) for title,path in link_targets if path.is_file()]
+    (out/'report.html').write_text(render_report(bundle, report_links),encoding='utf-8')
     (out/'methods.txt').write_text(methods_text(bundle)+'\n',encoding='utf-8')

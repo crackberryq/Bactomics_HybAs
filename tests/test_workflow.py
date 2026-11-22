@@ -296,6 +296,16 @@ def test_setup_without_samples(tmp_path):
     assert not any(c['tool'] in {'unicycler','kraken2','polypolish'} for c in calls(tmp_path))
 
 
+@pytest.mark.parametrize(('polish', 'busco', 'expected'), [
+    ('tripolish', True, True), ('none', True, False), ('tripolish', False, False),
+])
+def test_setup_prepares_validation_only_for_planned_polishing(tmp_path, polish, busco, expected):
+    _, env = prepare(tmp_path, {}, polish=polish)
+    result = run(tmp_path, env, 'setup_envs', '-n', '--config', 'setup_only=true',
+                 f'run_busco={str(busco).lower()}')
+    assert ('capture_env_polishing_validation_global' in result.stdout) == expected
+
+
 def test_oversized_reservation_blocks_before_processing(tmp_path):
     cfg,env=prepare(tmp_path,{'sample':'hybrid'},kraken=True)
     data=yaml.safe_load(cfg.read_text());data['kraken_mem_mb']=20000;cfg.write_text(yaml.safe_dump(data))
