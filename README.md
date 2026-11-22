@@ -14,6 +14,8 @@
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
+**HybAs AWARE 10.0.0a9** adds final-coordinate polishing validation and a [completed-run refresh command](docs/RELEASE_10.0.0a9.md).
+
 **HybAs AWARE 10.0.0a8** adds stage-resolved polishing research measurements. [Research update](docs/RELEASE_10.0.0a8.md)
 
 **HybAs AWARE 10.0.0a7** fixes BUSCO database preparation when the downloaded

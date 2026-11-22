@@ -204,6 +204,9 @@ def generate(isolate, output_dir, with_audit):
         stage_section += (f'<h3>Polishing trajectory</h3><img style="max-width:100%" '
                           f'src="{esc(trajectory)}/trajectory.svg" alt="Ordered polishing stages">'
                           f'<p><a href="{esc(trajectory)}/index.html">Stage measurements, transitions and evidence</a></p>')
+    validation = isolate / "reports/polishing_validation/summary.html"
+    if validation.is_file():
+        stage_section += validation.read_text() + '<p><a href="../polishing_validation/index.html">Download polishing validation tables</a></p>'
     provenance_rows = [{"Evidence": k, "Source": v} for k, v in sorted(evidence_sources.items())]
     if not dec:
         decision_notice = ("<p class='warn'>Historical run: AWARE decision metadata was not found. "

@@ -1,3 +1,7 @@
+## 10.0.0a9 — Final-coordinate polishing validation
+
+Measure stage-to-final divergence, projected edit windows, final annotation overlap and Illumina pileup evidence. Refresh a completed trajectory in place from its retained inputs.
+
 ## 10.0.0a8 — Polishing trajectories
 
 Generate stage measurements, marker changes, alignment-based edits and an SVG trajectory for polished assemblies with BUSCO enabled.

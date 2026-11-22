@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a8 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a9 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -4657,8 +4657,28 @@ rule polishing_trajectory:
         "python {input.script:q} --receipt {input.receipt:q} --out {output:q} --lineage {params.lineage:q} --threads {threads}"
 
 
+rule polishing_validation:
+    input:
+        trajectory=trajectory_dir("{isolate}"),
+        final=final_asm("{isolate}"),
+        annotation=prokka_gff("{isolate}"),
+        reads=[trim_r1("{isolate}"), trim_r2("{isolate}")],
+        script=os.path.join(SOURCE_ROOT, "workflow/scripts/polishing_validation.py")
+    output:
+        directory(os.path.join(reports_dir("{isolate}"), "polishing_validation"))
+    conda:
+        "workflow/envs/polishing_validation.yml"
+    threads: THREADS
+    params:
+        iso=iso_dir("{isolate}"),
+        retention_paths=lambda wc: [os.path.join(reports_dir(wc.isolate), "polishing_validation")]
+    shell:
+        "python {input.script:q} --isolate-dir {params.iso:q} --out {output:q} --threads {threads}"
+
+
 rule research_report:
     input:
+        validation=lambda wc: [os.path.join(reports_dir(wc.isolate), "polishing_validation")] if RUN_BUSCO and planned_stages(wc.isolate) else [],
         trajectory=lambda wc: [trajectory_dir(wc.isolate)] if RUN_BUSCO and planned_stages(wc.isolate) else [],
         summary=run_summary_json("{isolate}"),
         execution=polish_execution("{isolate}"),
