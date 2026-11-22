@@ -18,3 +18,6 @@ dependencies:
 - pigz=2.8
 - hmmer=3.4
 - bbmap=39.01
+- prodigal=2.6.3
+- mummer=3.23
+- matplotlib-base

@@ -2,7 +2,7 @@
 set -euo pipefail
 # HYBAS_BROWSER_PREPARATION_CONTRACT=1
 # Run inside Snakemake's environment; never activate another environment here.
-for tool in fastqc NanoPlot kraken2 extract_kraken_reads.py busco quast.py seqkit samtools pigz java; do
+for tool in fastqc NanoPlot kraken2 extract_kraken_reads.py busco quast.py seqkit samtools pigz java prodigal dnadiff nucmer; do
   location=$(command -v "$tool") || { echo "Missing executable: $tool" >&2; exit 1; }
   case "$location" in "$CONDA_PREFIX"/*) ;; *) echo "Executable outside managed environment: $tool" >&2; exit 1;; esac
 done

@@ -197,7 +197,13 @@ def generate(isolate, output_dir, with_audit):
                      stage_graph + "</div>" +
                      table(["Stage", "Contigs", "Assembly (bp)", "N50 (bp)", "GC (%)"],
                            historical_rows)) if historical_rows else (
-                     "<p class='warn'>No compatible stage-by-stage QUAST reports found.</p>")
+                     "")
+    if (isolate / "reports/polishing_trajectory/index.html").is_file():
+        import os
+        trajectory = os.path.relpath(isolate / "reports/polishing_trajectory", output_dir)
+        stage_section += (f'<h3>Polishing trajectory</h3><img style="max-width:100%" '
+                          f'src="{esc(trajectory)}/trajectory.svg" alt="Ordered polishing stages">'
+                          f'<p><a href="{esc(trajectory)}/index.html">Stage measurements, transitions and evidence</a></p>')
     provenance_rows = [{"Evidence": k, "Source": v} for k, v in sorted(evidence_sources.items())]
     if not dec:
         decision_notice = ("<p class='warn'>Historical run: AWARE decision metadata was not found. "

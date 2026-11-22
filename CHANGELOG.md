@@ -1,3 +1,7 @@
+## 10.0.0a8 — Polishing trajectories
+
+Generate stage measurements, marker changes, alignment-based edits and an SVG trajectory for polished assemblies with BUSCO enabled.
+
 ## 10.0.0a7 — BUSCO lineage database preparation
 
 HybAs now locates the requested dataset in the BUSCO download's `lineages` directory, verifies its required files and installs it in the configured lineage folder. This fixes fresh downloads that previously stopped after decompression.

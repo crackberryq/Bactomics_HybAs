@@ -14,6 +14,8 @@
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
+**HybAs AWARE 10.0.0a8** adds stage-resolved polishing research measurements. [Research update](docs/RELEASE_10.0.0a8.md)
+
 **HybAs AWARE 10.0.0a7** fixes BUSCO database preparation when the downloaded
 dataset is extracted under `lineages/`. [Release notes](docs/RELEASE_10.0.0a7.md)
 · [Release conventions](docs/RELEASE_CONVENTIONS.md).

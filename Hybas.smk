@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a7 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a8 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -4633,8 +4633,33 @@ onerror:
         COMPUTATIONAL_RECORDER.finish("failed")
 
 
+def trajectory_dir(iso):
+    return os.path.join(reports_dir(iso), "polishing_trajectory")
+
+
+rule polishing_trajectory:
+    input:
+        receipt=polish_execution("{isolate}"),
+        assemblies=lambda wc: [stage_path(wc.isolate, s) for s in [base_stage(wc.isolate)] + planned_stages(wc.isolate)],
+        dataset=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]), item["path"]) for item in busco_content_identity(ISO_OVERRIDES[wc.isolate]["busco_lineage"])["files"]],
+        script=os.path.join(SOURCE_ROOT, "workflow/scripts/polishing_trajectory.py")
+    output:
+        directory(trajectory_dir("{isolate}"))
+    conda:
+        "workflow/envs/qc.yml"
+    threads: THREADS
+    resources:
+        mem_mb=rule_memory("busco", 4096)
+    params:
+        lineage=lambda wc: busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]),
+        retention_paths=lambda wc: [trajectory_dir(wc.isolate)]
+    shell:
+        "python {input.script:q} --receipt {input.receipt:q} --out {output:q} --lineage {params.lineage:q} --threads {threads}"
+
+
 rule research_report:
     input:
+        trajectory=lambda wc: [trajectory_dir(wc.isolate)] if RUN_BUSCO and planned_stages(wc.isolate) else [],
         summary=run_summary_json("{isolate}"),
         execution=polish_execution("{isolate}"),
         decision=kraken_decision_tsv("{isolate}"),
