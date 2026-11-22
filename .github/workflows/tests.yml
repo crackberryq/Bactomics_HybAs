@@ -225,17 +225,23 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Publish checked AWARE release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v10.0.0a7"
+          version=$(PYTHONPATH=workflow/lib python -c 'from workflow_support import VERSION; print(VERSION.removeprefix("HybAs-AWARE-"))')
+          tag="v$version"
+          # A release-only CI edit can follow the tested software commit.
+          source=$(git log -1 --format=%H -- . ':!.github/workflows/tests.yml')
+          git diff --quiet "$source" "$GITHUB_SHA" -- . ':!.github/workflows/tests.yml'
           if gh release view "$tag" >/dev/null 2>&1; then
             git fetch origin "refs/tags/$tag:refs/tags/$tag"
-            test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
+            test "$(git rev-list -n 1 "$tag")" = "$source"
           else
             notes="$RUNNER_TEMP/hybas-release-notes.md"
-            cat docs/RELEASE_10.0.0a7.md > "$notes"
-            printf '\nTested source: `%s`. Required CI checks: %s/%s/actions/runs/%s.\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$notes"
-            gh release create "$tag" --target "$GITHUB_SHA" --title "HybAs AWARE 10.0.0a7 — Alpha" --prerelease --notes-file "$notes"
+            cat "docs/RELEASE_${version}.md" > "$notes"
+            printf '\nTested source: `%s`. Required CI checks: %s/%s/actions/runs/%s.\n' "$source" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$notes"
+            gh release create "$tag" --target "$source" --title "HybAs AWARE $version — Alpha" --prerelease --notes-file "$notes"
           fi
