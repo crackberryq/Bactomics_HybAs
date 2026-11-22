@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a10 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a11 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------

@@ -1,3 +1,7 @@
+## 10.0.0a11
+
+HybAs reports identify the running renderer independently of the original workflow version.
+
 ## 10.0.0a10 — Research reporting
 
 Shared research-report presentation, aligned polishing density tracks and a validation environment deployment probe.

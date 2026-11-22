@@ -40,5 +40,7 @@ with tempfile.TemporaryDirectory() as tmp:
         page.set_viewport_size({'width':390,'height':844})
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         page.screenshot(path='ui-previews/aware-outputs-mobile.png',full_page=True)
+        from polishing_browser import check_polishing
+        check_polishing(page, root / 'polishing-browser')
         assert not errors,errors
         browser.close()

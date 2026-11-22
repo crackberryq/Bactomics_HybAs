@@ -10,9 +10,9 @@ from urllib.parse import quote
 from datetime import datetime, timezone
 from pathlib import Path
 from hybas_report_assets import CSS
+from workflow_support import VERSION as RENDERER_VERSION
 
 SCHEMA = 'hybas-report-1'
-RENDERER_VERSION = 'HybAs-AWARE-10.0.0a2'
 
 
 def e(value):
