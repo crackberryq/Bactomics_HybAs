@@ -1,3 +1,7 @@
+## 10.0.0a12
+
+The AWARE report identifies its experimental status in the header for each operating mode.
+
 ## 10.0.0a11
 
 HybAs reports identify the running renderer independently of the original workflow version.

@@ -66,5 +66,5 @@ def render(document):
     body += '</section><section id="next"><h2>Next steps</h2><ol><li>Open AWARE outputs in Bactologix to select eligible groups and register derived samples.</li><li>Create separate run drafts for those samples. Their retained libraries determine the route; reclassification is optional.</li><li>For a parent stopped after AWARE, use Continue to assembly. The app checks saved evidence and required environments first.</li></ol><p>To move outputs to another workstation, copy this entire AWARE folder and import its manifest.json.</p><p><a href="manifest.json">Bundle manifest</a> · <a href="filtering.tsv">Recorded filtering decisions</a>'
     if stats:body+=' · <a href="statistics.json">Statistical evidence JSON</a>'
     body += '</p></section>'
-    return evidence_page("AWARE target and filtering", document["isolate"] + " · AWARE stage complete", body,
+    return evidence_page("AWARE target and filtering", document["isolate"] + " · AWARE stage complete · Experimental", body,
                          [("target","Target and filtering"),("groups","Retained groups"),("statistics","Statistical evidence"),("next","Next steps")])
