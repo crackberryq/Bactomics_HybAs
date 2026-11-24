@@ -16,6 +16,7 @@ from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from report_theme import evidence_page
+from polishing_validation_figures import projections
 
 
 def write_table(path, rows, fields):
@@ -215,7 +216,7 @@ def measure(args):
         dataset=(args.lineage/"dataset.cfg").read_text(), prodigal_mode="single", genetic_code=11,
         remove_one_terminal_stop=True, thresholds=[0.5,0.1,0.1], matched_control=None), indent=2))
     draw(root / "trajectory.svg", rows)
-    render_saved(root, root)
+    render_saved(root, root, args.validation_dir)
 
 
 def read_table(path):
@@ -267,7 +268,7 @@ def evidence_table(items, fields):
     return '<div class="table-wrap"><table><thead><tr>'+heads+'</tr></thead><tbody>'+''.join(cells)+'</tbody></table></div>'
 
 
-def render_saved(source, out):
+def render_saved(source, out, validation_dir=None):
     source, out = Path(source).resolve(), Path(out).resolve()
     rows = read_table(source / "stages.tsv")
     if not rows or any(not re.fullmatch(r"[A-Za-z0-9_-]+", row["stage"]) for row in rows):
@@ -295,8 +296,11 @@ def render_saved(source, out):
     body = '<section id="stage"><h2>Effect across stages</h2><div class="grid">' + ''.join(
         f'<div class="stat"><small>{k}</small><strong>{v}</strong></div>' for k,v in stats) + '</div>'
     delta = float(last["complete_pct"]) - float(first["complete_pct"])
+    dip = ""
+    if lowest is not first and lowest is not last:
+        dip = f'The lowest stage was {html.escape(lowest["stage"])} at {float(lowest["complete_pct"]):.2f}%. '
     body += (f'<p class="panel">Complete BUSCO markers changed by <strong>{delta:+.2f} percentage points</strong> '
-             f'from {html.escape(first["stage"])} to {html.escape(last["stage"])}. '
+             f'from {html.escape(first["stage"])} to {html.escape(last["stage"])}. {dip}'
              'Protein predictions and marker recovery describe gene-space effects. Base accuracy requires independent evidence.</p>')
     body += '<div class="chart-grid">' + ''.join(metric_figure(rows,*metric) for metric in [
         ("complete_pct","Complete BUSCO markers","%","#087c78"), ("protein_count","Predicted proteins","count","#2e668e"),
@@ -313,10 +317,16 @@ def render_saved(source, out):
         body += ('<p class="note">The response follows the majority direction across BUSCO completeness, the fraction of short proteins and mean protein length. The recipe records the thresholds.</p>')
     else:
         body += '<p>A single retained stage has no adjacent-stage comparison.</p>'
+    validation_page = (Path(validation_dir) if validation_dir else source.parent / "polishing_validation") / "index.html"
+    if validation_dir or validation_page.is_file():
+        href = quote(os.path.relpath(validation_page, out))
+        body += f'<p><a href="{href}#edit-density-atlas">See where edits occurred</a> in final assembly coordinates.</p>'
+    body += '</div></section><section id="geometry"><h2>Geometric trajectory</h2><div class="panel">'
+    body += '<h3>Top, front and side views</h3>' + projections(rows)
     svg = source / "trajectory.svg"
     if svg.is_file():
         image = base64.b64encode(svg.read_bytes()).decode("ascii")
-        body += ('<details><summary>Geometric trajectory</summary><img alt="Ordered polishing trajectory" '
+        body += ('<details><summary>Oblique view</summary><img alt="Ordered polishing trajectory" '
                  f'src="data:image/svg+xml;base64,{image}"><p>Stage spacing shows order. '
                  'Colour represents BUSCO completeness.</p></details>')
     if (source / "geometry.json").is_file():
@@ -342,7 +352,7 @@ def render_saved(source, out):
         body += '<details><summary>Polypolish input mapping</summary>'+links(files)+'</details>'
     body += '</div></section>'
     page = evidence_page("Polishing trajectory", " → ".join(r["stage"] for r in rows), body,
-                         [("stage","Stage effects"),("transitions","Adjacent changes"),("files","Evidence files")],
+                         [("stage","Stage effects"),("transitions","Adjacent changes"),("geometry","Trajectory views"),("files","Evidence files")],
                          report_type="trajectory")
     (out / "index.html").write_text(page, encoding="utf8")
 
@@ -350,13 +360,14 @@ def render_saved(source, out):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--render-from", type=Path, help="Render retained stage and transition tables")
+    parser.add_argument("--validation-dir", type=Path, help="Validation report generated alongside this trajectory")
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--lineage", type=Path)
     parser.add_argument("--threads", type=int)
     args = parser.parse_args()
     if args.render_from:
-        render_saved(args.render_from, args.out)
+        render_saved(args.render_from, args.out, args.validation_dir)
     elif args.receipt and args.lineage and args.threads and args.threads > 0:
         measure(args)
     else:

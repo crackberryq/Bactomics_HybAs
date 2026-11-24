@@ -12,11 +12,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-from aware_read_audit import audit, audit_long, decision
+from aware_read_audit import audit, audit_long, decision, retention_only
 from hybas_report_compat import evidence
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from report_theme import STYLE
+from aware_modes import kraken_skipped
 
 
 def read_json(path):
@@ -49,6 +50,14 @@ def write_tsv(path, rows, fields):
         writer.writerows(rows)
 
 
+def passthrough_panel(record, units, unit_label):
+    # Older records counted missing Kraken assignments as an integrity failure even in off mode.
+    assessment = retention_only(record["totals"], units, unit_label)
+    label = "Read IDs match the configured passthrough" if assessment["action_consistent"] else "Read ID discrepancies require review"
+    return (f"<p class='badge'>{label}</p>" + key_values(assessment["totals"], assessment["totals"])
+            + "<p>Kraken was disabled. Taxonomic assignments were skipped.</p>")
+
+
 def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_dir=None, audit_from=None):
     trajectory_dir = Path(trajectory_dir or isolate / "reports/polishing_trajectory")
     validation_dir = Path(validation_dir or isolate / "reports/polishing_validation")
@@ -69,18 +78,19 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
     execution = read_json(isolate / "metadata/polish_execution.json")
     platform = "pacbio" if summary.get("long_read_platform") == "pacbio" else "ont"
     platform_label = "PacBio" if platform == "pacbio" else "ONT"
+    skipped_kraken = kraken_skipped(dec, summary)
     if audit_from:
         result = saved_audit("aware_filter_audit.json")
         ont = saved_audit(f"aware_{platform}_filter_audit.json")
     elif with_audit:
         target = dec.get("selected_target_taxid", "")
-        result = audit(isolate, output_dir, target)
-        ont = audit_long(isolate, output_dir, target, platform)
+        result = audit(isolate, output_dir, target, kraken_enabled=not skipped_kraken)
+        ont = audit_long(isolate, output_dir, target, platform, kraken_enabled=not skipped_kraken)
     else:
         result = {"status": "not_requested", "note": "Use --audit-reads to reconcile merged and cleaned FASTQs."}
         ont = {"status": "not_requested"}
     (output_dir / f"aware_{platform}_filter_audit.json").write_text(json.dumps(ont, indent=2) + "\n", encoding="utf8")
-    if ont["status"] == "completed":
+    if ont["status"] == "completed" and not skipped_kraken:
         write_tsv(output_dir / f"aware_{platform}_removed_taxa.tsv", ont["by_taxon"],
                   ["taxid", "name", "rank", "category", "input_reads", "retained_reads", "removed_reads"])
         write_tsv(output_dir / f"aware_{platform}_removed_categories.tsv", ont["by_category"],
@@ -95,9 +105,9 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
                 observed_passthrough if result["declared_illumina_action"] == "passthrough"
                 else result["integrity_ok"] if result["declared_illumina_action"] == "whitelist_filter"
                 else False)
-            result["action_verification_scope"] = (
+            result["action_verification_scope"] = ("FASTQ-ID retention only. Kraken was disabled." if skipped_kraken else
                 "Observed read retention only; descendant whitelist membership is not independently verified.")
-    if result["status"] == "completed":
+    if result["status"] == "completed" and not skipped_kraken:
         write_tsv(output_dir / "aware_removed_taxa.tsv", result["by_taxon"],
                   ["taxid", "name", "rank", "category", "input_pairs", "retained_pairs",
                    "removed_pairs", "partial_pairs"])
@@ -122,7 +132,9 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
             "selected_vs_runner_up_delta_percent", "platform_agreement_score",
             "platform_agreement_reason", "kraken_include_children"]
     audit_html = "<p class='warn'>Read audit: " + esc(result["status"]) + "</p>"
-    if result["status"] == "completed":
+    if result["status"] == "completed" and skipped_kraken:
+        audit_html = passthrough_panel(result, "pairs", "paired_read_ids")
+    elif result["status"] == "completed":
         totals = result["totals"]
         audit_html = ("<p class='badge'>Paired-read reconciliation: " +
                       ("PASS" if result["integrity_ok"] else "ATTENTION") + "</p>" +
@@ -140,7 +152,11 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
     elif result.get("missing_files"):
         audit_html += "<p class='note'>Missing inputs: " + esc(", ".join(result["missing_files"])) + "</p>"
     ont_html = f"<p class='warn'>{platform_label} audit: " + esc(ont["status"]) + "</p>"
-    if ont["status"] == "completed":
+    if ont["status"] == "completed" and skipped_kraken:
+        ont_html = passthrough_panel(ont, "reads", "read_ids")
+    elif skipped_kraken and summary.get("run_mode") == "illumina_only":
+        ont_html = "<p>No long-read input in this run.</p>"
+    elif ont["status"] == "completed":
         ont_html = (f"<p class='badge'>{platform_label} read reconciliation: " +
                     ("PASS" if ont["integrity_ok"] else "ATTENTION") + "</p>" +
                     key_values(ont["totals"], list(ont["totals"])) +
@@ -193,12 +209,16 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
         validation_section = (f'<section id="polishing-validation"><h2>Polishing validation</h2><p>'
                               f'<a href="{href(validation_dir / "index.html")}">Open polishing validation</a></p></section>')
     provenance_rows = [{"Evidence": k, "Source": v} for k, v in sorted(evidence_sources.items())]
-    if not dec:
-        decision_notice = ("<p class='warn'>Historical run: AWARE decision metadata was not found. "
+    if skipped_kraken:
+        decision_html = "<p><strong>Kraken skipped by configuration.</strong> Reads passed through without taxonomic filtering.</p>"
+    elif not dec:
+        decision_html = ("<p class='warn'>Historical run: AWARE decision metadata was not found. "
                            "Kraken classifications may still be available, but a target decision, "
                            "confidence or whitelist action cannot be reconstructed reliably.</p>")
     else:
-        decision_notice = ""
+        decision_html = ("<p class='note'>Target election, per-platform read actions and conservative confidence "
+                         "are separate outputs. A low confidence label does not override a platform's passthrough.</p>"
+                         + key_values(dec, keys))
     strategy = summary.get("input_strategy", {})
     strategy_html = "<details><summary>Input libraries and assembly choice</summary><pre>" + esc(json.dumps(strategy, indent=2)) + "</pre></details>"
     model_html = "<h3>Medaka model provenance</h3>" + key_values(summary, [
@@ -217,7 +237,7 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
     exports = [("aware_filter_audit.json", "Illumina audit JSON"),
                (f"aware_{platform}_filter_audit.json", f"{platform_label} audit JSON")]
     for prefix, label, audit_record in [("aware", "Illumina", result), (f"aware_{platform}", platform_label, ont)]:
-        if audit_record["status"] == "completed":
+        if audit_record["status"] == "completed" and not skipped_kraken:
             exports.extend([(f"{prefix}_removed_taxa.tsv", f"{label} taxa TSV"),
                             (f"{prefix}_removed_categories.tsv", f"{label} categories TSV")])
     file_links = "<ul class='evidence-links'>" + "".join(f"<li><a href='{name}'>{esc(label)}</a></li>" for name,label in exports) + "</ul>"
@@ -234,7 +254,8 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
         "<div class='app'><aside><div class='brand'>HybAs</div><div class='sub'>BACTOMICS · RESEARCH EVIDENCE</div>"
         "<nav aria-label='Report sections'>" + navigation + "</nav></aside><main>"
         "<div class='hero'><h1>" + esc(isolate.name) + "</h1><p>HybAs 10 — Experimental · AWARE+ research report · input modes and polishing require validation</p></div>"
-        "<section id='overview'><h2>Overview</h2><div class='grid'>" + stats + "</div>"
+        "<section id='overview'><h2>Overview</h2><div class='grid'>" + stats + "</div>" +
+        ("<p class='badge'>Kraken skipped by configuration</p>" if skipped_kraken else "") +
         "<p class='warn'><strong>Analytical suitability: not assessed.</strong> Recorded measurements and successful processing "
         "do not establish genome correctness or suitability for downstream negative findings.</p></section>"
         "<section id='assembly'><h2>Assembly and polishing</h2><div class='panel'>" + stage_section +
@@ -245,9 +266,7 @@ def generate(isolate, output_dir, with_audit, trajectory_dir=None, validation_di
         strategy_html + "<details><summary>Medaka model selection</summary>" + model_html + "</details></div></section>" +
         validation_section +
         "<section id='aware'><h2>AWARE decision explorer</h2><div class='panel'>"
-        "<p class='note'>Target election, per-platform read actions and conservative confidence are separate outputs. "
-        "A low confidence label does not override a platform's passthrough.</p>" +
-        decision_notice + key_values(dec, keys) + "</div></section>"
+        + decision_html + "</div></section>"
         "<section id='removed'><h2>Removed-read origins</h2><div class='panel'>" + audit_html +
         f"<h3>{platform_label} filtering</h3>" + ont_html +
         "<p class='note'>Kraken classifications are taxonomic assignments, not confirmed biological origin. "

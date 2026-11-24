@@ -94,3 +94,13 @@ def test_fallback_is_visible_in_report_and_methods_without_claiming_a_match():
         assert 'r1041_e82_400bps_sup_v5.2.0' in text
         assert 'not a match to the read metadata' in text
         assert 'does not establish scientific suitability' in text
+
+
+def test_historical_off_mode_overrides_legacy_confidence_in_presentation():
+    s = dict(isolate='sample', workflow_version='10', kraken_decision_mode='off',
+             kraken_awareness_state='fail_no_target', kraken_decision_confidence='low')
+    page = render_report(s)
+    visible = page.split('<script type="application/json"', 1)[0]
+    assert 'Kraken skipped by configuration' in visible
+    assert 'fail_no_target' not in visible
+    assert s['kraken_awareness_state'] == 'fail_no_target'

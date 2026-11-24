@@ -14,7 +14,7 @@
 
 [Releases](https://github.com/crackberryq/Bactomics_HybAs/releases) · [Changelog](CHANGELOG.md) · [Security policy](SECURITY.md)
 
-**HybAs AWARE 10.0.0a12** updates the research reports and polishing evidence views. [Release notes](docs/RELEASE_10.0.0a12.md)
+**HybAs AWARE 10.0.0a13** updates the research reports and polishing evidence views. [Release notes](docs/RELEASE_10.0.0a13.md)
 
 **HybAs AWARE 10.0.0a9** adds final-coordinate polishing validation and a [completed-run refresh command](docs/RELEASE_10.0.0a9.md).
 

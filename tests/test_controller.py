@@ -126,3 +126,12 @@ def test_quast_native_and_transposed_tables(tmp_path):
     assert quast_metric(path,'N50')=='1000'
     path.write_text('Assembly\t# contigs\tN50\nassembly\t3\t1000\n')
     assert quast_metric(path,'N50')=='1000'
+
+
+def test_skipped_kraken_has_no_confidence_measurement():
+    classify = controller(ROOT / 'Hybas.smk')['compute_taxonomic_confidence']
+    skipped = classify(None, None, '', mode='off')
+    assert skipped['awareness_state'] == 'skipped_by_configuration'
+    assert skipped['decision_confidence'] == 'not_assessed'
+    assert skipped['platform_agreement_score'] is None
+    assert classify(None, None, '', mode='aware')['awareness_state'] == 'fail_no_target'

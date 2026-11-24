@@ -183,3 +183,40 @@ def test_offline_edition_preserves_audit_and_links_requested_reports(tmp_path):
     assert 'href="../validation/index.html"' in page and 'href="../trajectory/index.html"' in page
     for filename in ("aware_filter_audit.json","aware_removed_taxa.tsv","aware_removed_categories.tsv"):
         assert (archive / filename).read_bytes() == (research / filename).read_bytes()
+
+
+def test_disabled_kraken_in_historical_research_edition(tmp_path):
+    iso = fixture(tmp_path)
+    decision = iso / "metadata/kraken_decision.tsv"
+    with decision.open('a') as out:
+        out.write("kraken_decision_mode\toff\n")
+    run(tmp_path)
+    page = (iso / "reports/hybas_research/hybas_report.html").read_text()
+    assert 'Kraken skipped by configuration' in page and 'fail_no_target' not in page
+    assert 'fail_no_target' in decision.read_text()
+
+
+def test_off_mode_read_retention_and_render_from_old_audit(tmp_path):
+    iso = fixture(tmp_path, cleaned=('target', 'human', 'other', 'unknown'), decision='passthrough')
+    (iso / 'reports/kraken2/illumina.kraken2.txt').unlink()
+    with (iso / 'metadata/kraken_decision.tsv').open('a') as f:
+        f.write('kraken_decision_mode\toff\n')
+    run(tmp_path, '--audit-reads')
+    reports = iso / 'reports/hybas_research'
+    audit_file = reports / 'aware_filter_audit.json'
+    audit = json.loads(audit_file.read_text())
+    assert audit['integrity_ok'] and audit['action_consistent']
+    assert audit['scope'] == 'read_retention_only' and audit['totals']['retained_pairs'] == 4
+    assert 'unmatched_kraken_pairs' not in audit['totals']
+    assert not (reports / 'aware_removed_taxa.tsv').exists()
+    assert 'Read IDs match the configured passthrough' in (reports / 'hybas_report.html').read_text()
+    audit.update(integrity_ok=False, action_consistent=False)
+    audit['totals']['unmatched_kraken_pairs'] = 4
+    audit_file.write_text(json.dumps(audit))
+    fresh = tmp_path / 'edition'
+    run(tmp_path, '--audit-from', reports, '--outdir', fresh)
+    assert 'Read IDs match the configured passthrough' in (fresh / 'hybas_report.html').read_text()
+    assert json.loads((fresh / 'aware_filter_audit.json').read_text()) == audit
+    fq(iso / 'work/inputs_cleaned/illumina_R2.clean.fq.gz', ['target'])
+    run(tmp_path, '--audit-reads')
+    assert 'Read ID discrepancies require review' in (reports / 'hybas_report.html').read_text()

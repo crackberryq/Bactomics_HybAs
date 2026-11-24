@@ -10,6 +10,7 @@ from urllib.parse import quote
 from datetime import datetime, timezone
 from pathlib import Path
 from hybas_report_assets import CSS
+from aware_modes import kraken_skipped
 from workflow_support import VERSION as RENDERER_VERSION
 
 SCHEMA = 'hybas-report-1'
@@ -128,11 +129,16 @@ def methods_text(bundle):
             "This fallback was not a match to the read metadata and does not establish scientific suitability. ")
     stages=s.get('executed_stages')
     stages=', '.join(stages) if isinstance(stages,list) else 'not recorded'
+    if kraken_skipped(keyvalues(bundle.get('tables', {}).get('kraken_decision', [])), s):
+        kraken_methods = "Kraken was skipped by configuration. "
+    else:
+        kraken_methods = (
+            f"Recorded AWARE decision mode: {s.get('kraken_decision_mode','not recorded')}; selected target: {s.get('kraken_selected_target_name','not recorded')} "
+            f"(taxid {s.get('kraken_selected_target_taxid','not recorded')}). ")
     return (f"Sample {s.get('isolate','not recorded')} was processed using {s.get('workflow_version','not recorded')} in {s.get('run_mode','not recorded')} mode. "
             f"The recorded final assembly source was {s.get('final_source_stage','not recorded')}. Executed polishing stages: {stages or 'none'}. "
             f"The requested polishing mode was {s.get('requested_polish_mode',s.get('polish_mode_requested','not recorded'))}. "
-            f"Recorded AWARE decision mode: {s.get('kraken_decision_mode','not recorded')}; selected target: {s.get('kraken_selected_target_name','not recorded')} "
-            f"(taxid {s.get('kraken_selected_target_taxid','not recorded')}). "
+            f"{kraken_methods}"
             f"BUSCO enabled: {s.get('run_busco','not recorded')}; lineage: {s.get('busco_lineage','not recorded')}. "
             f"Prokka enabled: {s.get('run_prokka','not recorded')}. " +
             medaka_fallback +
@@ -158,6 +164,9 @@ def render_report(data, report_links=()):
     notices=''.join('<p class="callout warn">'+e(w)+'</p>' for w in b.get('warnings',[]))
     overview=notices+'<div class="stats">'+stat('Assembly length',s.get('assembly_bp'),'bp · saved final assembly')+stat('Contigs',s.get('assembly_contig_count_fasta'))+stat('N50',s.get('quast_n50'),'bp · QUAST')+stat('BUSCO complete',s.get('busco_complete_percent') if s.get('run_busco') is not False else None,'Percent · disabled' if s.get('run_busco') is False else 'Percent · recorded lineage')+'</div>'
     overview+='<p class="callout warn"><strong>Analytical suitability: not assessed.</strong> Recorded QC measurements and successful processing do not establish genome correctness or downstream suitability.</p>'
+    skipped_kraken = kraken_skipped(decisions, s)
+    if skipped_kraken:
+        overview += '<p class="badge neutral">Kraken skipped by configuration</p>'
     overview+=panel('Run at a glance',pairs([('Input mode',s.get('run_mode')),('Final source stage',s.get('final_source_stage')),('GC (%)',s.get('quast_gc_percent')),('Analysis version',s.get('workflow_version')),('Report renderer',RENDERER_VERSION),('Circularity','Not recorded in this evidence bundle')]))
     long_prefix = "pacbio" if s.get("long_read_platform") == "pacbio" else "ont"
     long_title = "PacBio" if long_prefix == "pacbio" else "Oxford Nanopore"
@@ -171,13 +180,16 @@ def render_report(data, report_links=()):
         body='<p class="muted">Not used in this run.</p>' if inactive else bars([(label,read_metric(prefix,key,'reads')) for label,key in stages],' reads')+detail('Recorded base counts',table([dict(stage=label,bases=read_metric(prefix,key,'bp')) for label,key in stages],['stage','bases']))
         read_panels.append(panel(title,body))
     reads='<p class="muted">Each platform and mate is shown separately. Bars compare recorded read counts within that panel.</p><div class="grid-2">'+''.join(read_panels)+'</div>'
-    aware=panel('Selected target',pairs([('Name',s.get('kraken_selected_target_name')),('Taxid',s.get('kraken_selected_target_taxid')),('Rank',s.get('kraken_selected_target_rank')),('Selection source',s.get('kraken_selected_target_source')),('Selection reason',s.get('kraken_target_selection_reason'))]))
-    actions=[]
-    for name,prefix in [('Illumina','illumina'),(long_title,long_prefix)]:
-        inactive=(prefix=='illumina' and s.get('run_mode') in {'ont_only','pacbio_only'}) or (prefix in {'ont','pacbio'} and s.get('run_mode')=='illumina_only')
-        actions.append(dict(platform=name,target_support_percent='Not used' if inactive else s.get('pacbio_selected_target_percent') if prefix=='pacbio' else s.get('kraken_'+prefix+'_selected_target_percent'),cleaning_action='Not used' if inactive else decisions.get(prefix+'_kraken_decision','Not recorded'),reason=decisions.get(prefix+'_kraken_decision_reason','Not recorded')))
-    aware+=panel('Platform cleaning decisions',table(actions,['platform','target_support_percent','cleaning_action','reason']))
-    aware+=detail('Confidence and cross-platform agreement',pairs([('Decision confidence',s.get('kraken_decision_confidence')),('AWARE state',s.get('kraken_awareness_state')),('Agreement score',s.get('kraken_platform_agreement_score')),('Agreement reason',s.get('kraken_platform_agreement_reason')),('Runner-up',s.get('kraken_runner_up_name'))])+'<p>Target selection, platform-specific cleaning actions and combined confidence are separate recorded decisions.</p>')
+    if skipped_kraken:
+        aware = panel('Taxonomic filtering', '<p><strong>Kraken skipped by configuration.</strong> Reads passed through without taxonomic filtering.</p>')
+    else:
+        aware=panel('Selected target',pairs([('Name',s.get('kraken_selected_target_name')),('Taxid',s.get('kraken_selected_target_taxid')),('Rank',s.get('kraken_selected_target_rank')),('Selection source',s.get('kraken_selected_target_source')),('Selection reason',s.get('kraken_target_selection_reason'))]))
+        actions=[]
+        for name,prefix in [('Illumina','illumina'),(long_title,long_prefix)]:
+            inactive=(prefix=='illumina' and s.get('run_mode') in {'ont_only','pacbio_only'}) or (prefix in {'ont','pacbio'} and s.get('run_mode')=='illumina_only')
+            actions.append(dict(platform=name,target_support_percent='Not used' if inactive else s.get('pacbio_selected_target_percent') if prefix=='pacbio' else s.get('kraken_'+prefix+'_selected_target_percent'),cleaning_action='Not used' if inactive else decisions.get(prefix+'_kraken_decision','Not recorded'),reason=decisions.get(prefix+'_kraken_decision_reason','Not recorded')))
+        aware+=panel('Platform cleaning decisions',table(actions,['platform','target_support_percent','cleaning_action','reason']))
+        aware+=detail('Confidence and cross-platform agreement',pairs([('Decision confidence',s.get('kraken_decision_confidence')),('AWARE state',s.get('kraken_awareness_state')),('Agreement score',s.get('kraken_platform_agreement_score')),('Agreement reason',s.get('kraken_platform_agreement_reason')),('Runner-up',s.get('kraken_runner_up_name'))])+'<p>Target selection, platform-specific cleaning actions and combined confidence are separate recorded decisions.</p>')
     executed=s.get('executed_stages',[]);executed=executed if isinstance(executed,list) else []
     skipped=s.get('skipped_stages',{});skipped=skipped if isinstance(skipped,dict) else {}
     stages=[dict(stage=s.get('assembler') or 'unicycler',status='Recorded assembly source',reason='')]+[dict(stage=x,status='Executed',reason='') for x in executed]+[dict(stage=x,status='Skipped',reason=reason) for x,reason in skipped.items()]

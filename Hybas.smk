@@ -1,5 +1,5 @@
 ###############################################################################
-# Snakefile – HybAs AWARE 10.0.0a12 — Alpha (development)
+# Snakefile – HybAs AWARE 10.0.0a13 — Alpha (development)
 #
 # IEEE-grade design goals
 # -----------------------
@@ -1070,7 +1070,14 @@ def compute_platform_agreement(illumina_report, ont_report):
 
     return 0.0, "discordant_targets"
 
-def compute_taxonomic_confidence(illumina_report, ont_report, selected_taxid):
+def compute_taxonomic_confidence(illumina_report, ont_report, selected_taxid, mode=None):
+    if mode == "off":
+        return {
+            "runner_up_taxid": "", "runner_up_name": "NA", "runner_up_pct": None,
+            "delta_pct": None, "platform_agreement_score": None,
+            "platform_agreement_reason": "kraken_mode_off",
+            "decision_confidence": "not_assessed", "awareness_state": "skipped_by_configuration",
+        }
     selected_taxid = normalize_taxid(selected_taxid)
     if not selected_taxid:
         return {
@@ -2720,10 +2727,15 @@ rule kraken_decision:
             illumina_report=input.illumina_report,
             ont_report=input.ont_report,
             selected_taxid=target_info["selected_taxid"],
+            mode=KRAKEN_DECISION_MODE,
         )
 
         if AWARE_MODE in {"taxonomy", "split"}:
             combined_decision, combined_reason = "passthrough", "taxonomy_only_no_filtering"
+
+        def reported_number(value):
+            return "NA" if KRAKEN_DECISION_MODE == "off" else f"{value:.4f}"
+
         with open(output[0], "w", encoding="utf-8") as out:
             out.write("field\tvalue\n")
             out.write(f"aware_mode\t{AWARE_MODE}\n")
@@ -2738,21 +2750,21 @@ rule kraken_decision:
             out.write(f"selected_target_name\t{target_info['selected_name']}\n")
             out.write(f"selected_target_rank\t{target_info['selected_rank']}\n")
             out.write(f"selected_target_source\t{target_info['selected_source']}\n")
-            out.write(f"selected_target_percent_for_decision\t{target_info['selected_pct_for_decision']:.4f}\n")
-            out.write(f"illumina_selected_target_percent\t{target_info['illumina_selected_pct']:.4f}\n")
-            out.write(f"{long_platform(iso)}_selected_target_percent\t{target_info['ont_selected_pct']:.4f}\n")
+            out.write(f"selected_target_percent_for_decision\t{reported_number(target_info['selected_pct_for_decision'])}\n")
+            out.write(f"illumina_selected_target_percent\t{reported_number(target_info['illumina_selected_pct'])}\n")
+            out.write(f"{long_platform(iso)}_selected_target_percent\t{reported_number(target_info['ont_selected_pct'])}\n")
 
             out.write(f"inferred_target_taxid\t{target_info['inferred_taxid']}\n")
             out.write(f"inferred_target_name\t{target_info['inferred_name']}\n")
             out.write(f"inferred_target_rank\t{target_info['inferred_rank']}\n")
-            out.write(f"inferred_target_percent\t{target_info['inferred_pct']:.4f}\n")
+            out.write(f"inferred_target_percent\t{reported_number(target_info['inferred_pct'])}\n")
             out.write(f"target_selection_reason\t{target_info['selection_reason']}\n")
 
             out.write(f"runner_up_taxid\t{confidence_info['runner_up_taxid']}\n")
             out.write(f"runner_up_name\t{confidence_info['runner_up_name']}\n")
-            out.write(f"runner_up_percent\t{confidence_info['runner_up_pct']:.4f}\n")
-            out.write(f"selected_vs_runner_up_delta_percent\t{confidence_info['delta_pct']:.4f}\n")
-            out.write(f"platform_agreement_score\t{confidence_info['platform_agreement_score']:.4f}\n")
+            out.write(f"runner_up_percent\t{reported_number(confidence_info['runner_up_pct'])}\n")
+            out.write(f"selected_vs_runner_up_delta_percent\t{reported_number(confidence_info['delta_pct'])}\n")
+            out.write(f"platform_agreement_score\t{reported_number(confidence_info['platform_agreement_score'])}\n")
             out.write(f"platform_agreement_reason\t{confidence_info['platform_agreement_reason']}\n")
             out.write(f"decision_confidence\t{confidence_info['decision_confidence']}\n")
             out.write(f"awareness_state\t{confidence_info['awareness_state']}\n")
@@ -4659,6 +4671,7 @@ rule polishing_trajectory:
         assemblies=lambda wc: [stage_path(wc.isolate, s) for s in [base_stage(wc.isolate)] + planned_stages(wc.isolate)],
         dataset=lambda wc: [os.path.join(busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]), item["path"]) for item in busco_content_identity(ISO_OVERRIDES[wc.isolate]["busco_lineage"])["files"]],
         theme=os.path.join(SOURCE_ROOT, "workflow/lib/report_theme.py"),
+        figures=os.path.join(SOURCE_ROOT, "workflow/scripts/polishing_validation_figures.py"),
         script=os.path.join(SOURCE_ROOT, "workflow/scripts/polishing_trajectory.py")
     output:
         directory(trajectory_dir("{isolate}"))
@@ -4669,9 +4682,10 @@ rule polishing_trajectory:
         mem_mb=rule_memory("busco", 4096)
     params:
         lineage=lambda wc: busco_lineage_dir(ISO_OVERRIDES[wc.isolate]["busco_lineage"]),
+        validation=lambda wc: os.path.join(reports_dir(wc.isolate), "polishing_validation"),
         retention_paths=lambda wc: [trajectory_dir(wc.isolate)]
     shell:
-        "python {input.script:q} --receipt {input.receipt:q} --out {output:q} --lineage {params.lineage:q} --threads {threads}"
+        "python {input.script:q} --receipt {input.receipt:q} --out {output:q} --lineage {params.lineage:q} --threads {threads} --validation-dir {params.validation:q}"
 
 
 rule polishing_validation:

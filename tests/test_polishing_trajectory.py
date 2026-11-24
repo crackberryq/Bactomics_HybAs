@@ -1,14 +1,13 @@
 import csv
-import importlib.util
+import sys
 import json
 from pathlib import Path
 from types import SimpleNamespace
 import hashlib
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("trajectory", ROOT/"workflow/scripts/polishing_trajectory.py")
-trajectory = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(trajectory)
+sys.path.insert(0, str(ROOT / "workflow/scripts"))
+import polishing_trajectory as trajectory
 
 
 def test_retained_stage_report(tmp_path, monkeypatch):
@@ -48,7 +47,7 @@ def test_retained_stage_report(tmp_path, monkeypatch):
     monkeypatch.setattr(trajectory.subprocess,"run",run)
     monkeypatch.setattr(trajectory.subprocess,"check_output",lambda *a,**kw:"fixture")
     monkeypatch.setattr(trajectory,"draw",lambda path,rows:path.write_text("<svg/>"))
-    trajectory.measure(SimpleNamespace(receipt=receipt,out=out,lineage=lineage,threads=1))
+    trajectory.measure(SimpleNamespace(receipt=receipt,out=out,lineage=lineage,threads=1,validation_dir=None))
     with (out/"transitions.tsv").open() as f:
         row, = csv.DictReader(f,delimiter="\t")
     assert row["response"]=="R" and float(row["delta_busco_pp"])==50
@@ -64,3 +63,8 @@ def test_retained_stage_report(tmp_path, monkeypatch):
     assert 'data-hybas-report="trajectory"' in page and "Substitutions" in page
     assert "data:image/svg+xml;base64," in page and "draft → racon1" in page
     assert set(p.name for p in edition.iterdir()) == {"index.html"}
+    assert 'Top, front and side projections' in page
+    assert '#edit-density-atlas' not in page
+    validation = tmp_path / "edition/polishing_validation"
+    trajectory.render_saved(out, edition, validation)
+    assert 'href="../polishing_validation/index.html#edit-density-atlas"' in (edition / "index.html").read_text()

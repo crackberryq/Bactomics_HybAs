@@ -1,3 +1,7 @@
+## 10.0.0a13
+
+Kraken-off reporting, polishing trajectory projections and navigation to edit density.
+
 ## 10.0.0a12
 
 The AWARE report identifies its experimental status in the header for each operating mode.

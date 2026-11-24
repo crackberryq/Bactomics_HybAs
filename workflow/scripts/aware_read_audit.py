@@ -1,4 +1,5 @@
 """Disk-backed, read-only audit of AWARE read retention and Kraken assignments."""
+from contextlib import nullcontext
 import csv
 import gzip
 import os
@@ -68,7 +69,20 @@ def ids(path):
             yield canonical_id(h)
 
 
-def audit(isolate, output_dir, selected_taxid):
+def retention_only(totals, units, unit_label):
+    """Assess FASTQ-ID accounting when no taxonomic assignments were requested."""
+    counts = {k: v for k, v in totals.items() if "kraken" not in k}
+    integrity = (counts['input_' + units] == counts['retained_' + units] + counts['removed_' + units]
+                 and counts['unexpected_output_ids'] == 0 and counts['duplicate_fastq_ids'] == 0)
+    if units == 'pairs':
+        integrity = integrity and counts['partial_pairs'] == 0 and counts['unpaired_input_ids'] == 0
+    return {"status": "completed", "scope": "read_retention_only", "unit": unit_label,
+            "totals": counts, "integrity_ok": integrity,
+            "action_consistent": integrity and counts['removed_' + units] == 0,
+            "by_taxon": [], "by_category": []}
+
+
+def audit(isolate, output_dir, selected_taxid, *, kraken_enabled=True):
     """Compare actual merged/cleaned read-pair IDs with saved Kraken assignments.
 
     This checks observed retention, not whether the classifier itself is correct.
@@ -89,7 +103,8 @@ def audit(isolate, output_dir, selected_taxid):
         if not paths[key].is_file() and legacy[key].is_file():
             paths[key] = legacy[key]
     assignments = kraken / "illumina.kraken2.txt"
-    missing = [str(p) for p in [*paths.values(), assignments] if not p.is_file()]
+    required = [*paths.values(), assignments] if kraken_enabled else paths.values()
+    missing = [str(p) for p in required if not p.is_file()]
     if missing:
         return {"status": "unavailable", "missing_files": missing}
 
@@ -117,7 +132,7 @@ def audit(isolate, output_dir, selected_taxid):
         sql = ("INSERT INTO reads(id,taxid,kc) VALUES (?,?,1) ON CONFLICT(id) DO UPDATE SET "
                "kc=kc+1,taxid=CASE WHEN taxid IS NULL THEN excluded.taxid WHEN taxid=excluded.taxid THEN taxid ELSE '-1' END")
         batch, n = [], 0
-        with assignments.open(encoding="utf8", errors="replace") as f:
+        with (assignments.open(encoding="utf8", errors="replace") if kraken_enabled else nullcontext(())) as f:
             for line in f:
                 p = line.rstrip("\r\n").split("\t")
                 if len(p) < 3 or p[0] not in ("C", "U"):
@@ -148,6 +163,8 @@ def audit(isolate, output_dir, selected_taxid):
             FROM reads
         """).fetchone()
         totals = dict(zip(keys, [v or 0 for v in values]))
+        if not kraken_enabled:
+            return retention_only(totals, "pairs", "paired_read_ids") | {"input_file_records": counts}
         taxa = taxonomy(kraken / "illumina.report.txt")
         by_taxon = []
         for taxid, b, r, removed, partial in conn.execute("""
@@ -188,7 +205,7 @@ def audit(isolate, output_dir, selected_taxid):
             pass
 
 
-def audit_long(isolate, output_dir, selected_taxid, platform="ont"):
+def audit_long(isolate, output_dir, selected_taxid, platform="ont", *, kraken_enabled=True):
     if platform not in {"ont", "pacbio"}:
         raise ValueError("Unsupported long-read platform")
     kraken_name = "nanopore" if platform == "ont" else "pacbio"
@@ -201,7 +218,8 @@ def audit_long(isolate, output_dir, selected_taxid, platform="ont"):
         merged = isolate / f"work/{platform}_merged.fastq.gz"
     if not cleaned.is_file() and (isolate / f"work/{platform}_clean.fastq.gz").is_file():
         cleaned = isolate / f"work/{platform}_clean.fastq.gz"
-    missing = [str(p) for p in (merged, cleaned, kr) if not p.is_file()]
+    required = (merged, cleaned, kr) if kraken_enabled else (merged, cleaned)
+    missing = [str(p) for p in required if not p.is_file()]
     if missing:
         return {"status": "unavailable", "missing_files": missing}
     if merged.stat().st_size == 0:
@@ -227,7 +245,7 @@ def audit_long(isolate, output_dir, selected_taxid, platform="ont"):
         batch = []
         sql = ("INSERT INTO reads(id,taxid,kc) VALUES (?,?,1) ON CONFLICT(id) DO UPDATE SET "
                "kc=kc+1,taxid=CASE WHEN taxid IS NULL THEN excluded.taxid WHEN taxid=excluded.taxid THEN taxid ELSE '-1' END")
-        with kr.open(encoding="utf8", errors="replace") as f:
+        with (kr.open(encoding="utf8", errors="replace") if kraken_enabled else nullcontext(())) as f:
             for line in f:
                 p = line.rstrip("\r\n").split("\t")
                 if len(p) >= 3 and p[0] in ("C", "U"):
@@ -250,6 +268,8 @@ def audit_long(isolate, output_dir, selected_taxid, platform="ont"):
             FROM reads
         """).fetchone()
         totals = dict(zip(names, [v or 0 for v in values]))
+        if not kraken_enabled:
+            return retention_only(totals, "reads", "read_ids")
         taxa = taxonomy(report)
         rows = []
         for tid, b, r, removed in conn.execute("""

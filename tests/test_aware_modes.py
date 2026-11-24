@@ -15,7 +15,13 @@ def test_mode_execution(tmp_path, mode):
     assert ('kraken2' in invoked)==(mode!='off')
     assert 'extract_kraken_reads.py' not in invoked
     assert (tmp_path/'sample/work/final/assembly.final.fasta').exists()==(mode!='split')
-    if mode!='off':
+    if mode == 'off':
+        with (tmp_path / 'sample/metadata/kraken_decision.tsv').open() as f:
+            receipt = dict(line.rstrip('\n').split('\t', 1) for line in f)
+        assert receipt['awareness_state'] == 'skipped_by_configuration'
+        assert receipt['decision_confidence'] == 'not_assessed'
+        assert receipt['platform_agreement_score'] == 'NA'
+    else:
         doc=json.loads((tmp_path/'sample/reports/aware/manifest.json').read_text())
         assert doc['filtering']['aware_mode']==mode
         assert doc['filtering']['decision_confidence']=='high'

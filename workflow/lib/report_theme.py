@@ -56,7 +56,10 @@ a:focus-visible,summary:focus-visible{outline:3px solid #14998e;outline-offset:3
 .evidence-chart{border:1px solid var(--line);border-radius:12px;overflow:auto;background:white;padding:16px;margin:14px 0}
 .evidence-chart svg{display:block;width:100%;min-width:440px;height:auto}.panel>.table-wrap{margin-bottom:12px}
 @media(max-width:850px){aside{height:auto;position:static;padding:16px 20px}.sub{margin-bottom:8px}aside nav{display:flex;flex-wrap:wrap;gap:2px}aside a{padding:5px 7px}.hero{padding:24px}.app{display:block}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media print{aside{display:none}.app{display:block}main{padding:0}.stat,.panel{box-shadow:none}.table-wrap,.scroll{overflow:visible;max-height:none}section{break-inside:auto}}
+@media print{aside{display:none}.app{display:block}main{padding:0}.stat,.panel{box-shadow:none}.table-wrap,.scroll{overflow:visible;max-height:none}section{break-inside:auto}
+.table-wrap table{font-size:9pt}.table-wrap th,.table-wrap td{padding:4pt;overflow-wrap:break-word}
+.evidence-chart{overflow:visible;break-inside:avoid}.chart-grid{display:block}.chart-grid svg,.evidence-chart svg{min-width:0}
+img,svg{break-inside:avoid}.panel img{max-height:210mm;object-fit:contain}}
 """
 
 def evidence_page(title, context, body, nav=(), *, report_type="evidence"):
